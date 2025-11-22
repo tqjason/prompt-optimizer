@@ -1,4 +1,4 @@
-## 本仓库 Fork 自 linshenkx/prompt-optimizer，修改了 Docker 镜像构建，去掉了 MCP-Server，只保留优化器网页，镜像缩减为几十M，欢迎 pull
+## 本仓库 Fork 自 linshenkx/prompt-optimizer，修改了 Docker 镜像构建，去掉了 MCP-Server，只保留优化器网页，镜像缩减为几十M，比下载桌面版划算，欢迎 pull
 
  ```
 docker pull ghcr.io/tqjason/prompt-optimizer/prompt-optimizer:latest

@@ -1,3 +1,10 @@
+## 本仓库 Fork 自 linshenkx/prompt-optimizer，修改了 Docker 镜像构建，去掉了 MCP-Server，只保留优化器网页，镜像缩减为几十M，欢迎 pull，也可以 fork 我的仓库自己构建镜像。
+ ```
+docker pull ghcr.io/tqjason/prompt-optimizer/prompt-optimizer:latest
+ ```
+
+## 以下是原 readme
+
 # Prompt Optimizer (提示词优化器) 🚀
 
 <div align="center">

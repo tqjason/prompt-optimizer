@@ -10,8 +10,9 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 RUN pnpm run build
 
 FROM nginx:stable-alpine
-# 安装htpasswd工具、dos2unix和supervisor
-RUN apk add --no-cache apache2-utils dos2unix supervisor 
+# 安装 htpasswd 工具、dos2unix 
+RUN apk add --no-cache apache2-utils dos2unix
+# 不装 supervisor，不用同时管理 nginx 和 mcp-server 启动了
 # 这几个包是 mcp用到 不装了 nodejs npm gettext curl
 
 # 复制Nginx配置
@@ -26,7 +27,7 @@ ENV NGINX_PORT=80
 # 复制并设置启动脚本
 COPY docker/generate-config.sh /docker-entrypoint.d/40-generate-config.sh
 COPY docker/generate-auth.sh /docker-entrypoint.d/30-generate-auth.sh
-COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+# COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/start.sh /start-services.sh
 
 # 确保脚本有执行权限

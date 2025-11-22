@@ -1,7 +1,10 @@
-## 本仓库 Fork 自 linshenkx/prompt-optimizer，修改了 Docker 镜像构建，去掉了 MCP-Server，只保留优化器网页，镜像缩减为几十M，欢迎 pull，也可以 fork 我的仓库自己构建镜像。
+## 本仓库 Fork 自 linshenkx/prompt-optimizer，修改了 Docker 镜像构建，去掉了 MCP-Server，只保留优化器网页，镜像缩减为几十M，欢迎 pull
+
  ```
 docker pull ghcr.io/tqjason/prompt-optimizer/prompt-optimizer:latest
  ```
+ 
+### 也可以 fork 我的仓库自己构建镜像，在 Action 中手动启动 "Build my Docker Image and Push" 即可构建并发布到自己的 Packages 中
 
 ## 以下是原 readme
 

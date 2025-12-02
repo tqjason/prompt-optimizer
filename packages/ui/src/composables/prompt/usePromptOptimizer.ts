@@ -1,4 +1,4 @@
-import { ref, nextTick, computed, reactive, type Ref } from 'vue'
+import { ref, nextTick, computed, reactive, type Ref, type ComputedRef } from 'vue'
 
 import { useToast } from '../ui/useToast'
 import { useI18n } from 'vue-i18n'
@@ -33,24 +33,22 @@ interface AdvancedContextPayload {
 /**
  * 提示词优化器Hook
  * @param services 服务实例引用
- * @param selectedOptimizationMode 优化模式
+ * @param optimizationMode 当前优化模式（从 basicSubMode/proSubMode 计算得出的 computed）
  * @param selectedOptimizeModel 优化模型选择
  * @param selectedTestModel 测试模型选择
- * @param contextMode 上下文模式（用于变量替换策略）
+ * @param contextMode 上下文模式（用于变量替换策略，兼容性保留）
  * @returns 提示词优化器接口
+ * @deprecated optimizationMode 参数建议传入 computed 值（从 basicSubMode/proSubMode 动态计算）
  */
+type OptimizationModeSource = Ref<OptimizationMode> | ComputedRef<OptimizationMode>
+
 export function usePromptOptimizer(
   services: Ref<AppServices | null>,
-  selectedOptimizationMode?: Ref<OptimizationMode>,    // 优化模式
+  optimizationMode: OptimizationModeSource,    // 必需参数，接受 computed
   selectedOptimizeModel?: Ref<string>,                 // 优化模型选择
   selectedTestModel?: Ref<string>,                     // 测试模型选择
   contextMode?: Ref<import('@prompt-optimizer/core').ContextMode>  // 上下文模式
 ) {
-  // 如果没有传入参数，抛出错误而不是使用默认值
-  if (!selectedOptimizationMode) {
-    throw new Error('selectedOptimizationMode is required for usePromptOptimizer')
-  }
-  const optimizationMode = selectedOptimizationMode
   const optimizeModel = selectedOptimizeModel || ref('')
   const testModel = selectedTestModel || ref('')
   const toast = useToast()
@@ -144,11 +142,11 @@ export function usePromptOptimizer(
               const baseType = (optimizationMode.value === 'system' ? 'optimize' : 'userOptimize') as PromptRecordType
               const recordType = (() => {
                 if (isPro) {
-                  return (optimizationMode.value === 'system' ? 'contextSystemOptimize' : 'contextUserOptimize') as PromptRecordType
+                  return (optimizationMode.value === 'system' ? 'conversationMessageOptimize' : 'contextUserOptimize') as PromptRecordType
                 }
                 // 兼容：若选择的是 context 模板（即使当前模式非 pro），也记录为 context*
                 const tplType = currentTemplate.metadata?.templateType
-                if (tplType === 'contextSystemOptimize' || tplType === 'contextUserOptimize') return tplType as PromptRecordType
+                if (tplType === 'conversationMessageOptimize' || tplType === 'contextUserOptimize') return tplType as PromptRecordType
                 return baseType
               })()
 
@@ -197,7 +195,15 @@ export function usePromptOptimizer(
   
   // 带上下文的优化提示词
   state.handleOptimizePromptWithContext = async (advancedContext: AdvancedContextPayload) => {
-    if (!state.prompt.trim() || state.isOptimizing) return
+    // 对于系统模式，检查消息而不是prompt
+    const hasMessages = advancedContext.messages && Object.keys(advancedContext.messages).length > 0
+    const hasPrompt = state.prompt.trim()
+
+    // 至少需要有消息或prompt其中之一
+    if ((!hasMessages && !hasPrompt) || state.isOptimizing) {
+      console.log('[usePromptOptimizer] Skipping optimization:', { hasMessages, hasPrompt, isOptimizing: state.isOptimizing })
+      return
+    }
 
     // 根据优化模式选择对应的模板
     const currentTemplate = optimizationMode.value === 'system' 
@@ -224,9 +230,15 @@ export function usePromptOptimizer(
 
     try {
       // 构建带有高级上下文的优化请求
+      // 在系统模式下，如果没有单独的prompt，使用消息内容作为描述
+      const targetPrompt = state.prompt.trim() ||
+        (advancedContext.messages && Object.keys(advancedContext.messages).length > 0
+          ? t('toast.info.multiTurnOptimizationPrompt', { count: Object.keys(advancedContext.messages).length })
+          : '');
+
       const request: OptimizationRequest = {
         optimizationMode: optimizationMode.value,
-        targetPrompt: state.prompt,
+        targetPrompt,
         templateId: currentTemplate.id,
         modelKey: optimizeModel.value,
         contextMode: contextMode?.value,  // 传递上下文模式
@@ -258,15 +270,15 @@ export function usePromptOptimizer(
               const isPro = (functionMode.value as FunctionMode) === 'pro'
               const baseType = (optimizationMode.value === 'system' ? 'optimize' : 'userOptimize') as PromptRecordType
               const recordType = (() => {
-                if (isPro) return (optimizationMode.value === 'system' ? 'contextSystemOptimize' : 'contextUserOptimize') as PromptRecordType
+                if (isPro) return (optimizationMode.value === 'system' ? 'conversationMessageOptimize' : 'contextUserOptimize') as PromptRecordType
                 const tplType = currentTemplate.metadata?.templateType
-                if (tplType === 'contextSystemOptimize' || tplType === 'contextUserOptimize') return tplType as PromptRecordType
+                if (tplType === 'conversationMessageOptimize' || tplType === 'contextUserOptimize') return tplType as PromptRecordType
                 return baseType
               })()
 
               const recordData = {
                 id: uuidv4(),
-                originalPrompt: state.prompt,
+                originalPrompt: targetPrompt,  // 使用 targetPrompt 而不是 state.prompt
                 optimizedPrompt: state.optimizedPrompt,
                 type: recordType,
                 modelKey: optimizeModel.value,
@@ -278,7 +290,16 @@ export function usePromptOptimizer(
                   functionMode: functionMode.value,
                   hasAdvancedContext: true,
                   variableCount: Object.keys(advancedContext.variables).length,
-                  messageCount: advancedContext.messages?.length || 0
+                  messageCount: advancedContext.messages?.length || 0,
+                  conversationSnapshot: advancedContext.messages?.map(msg => ({
+                    id: msg.id,
+                    role: msg.role,
+                    content: msg.content,
+                    originalContent: msg.originalContent,
+                    // 运行时属性：消息被优化后动态添加的元数据
+                    chainId: (msg as Record<string, unknown>).chainId as string | undefined,
+                    appliedVersion: (msg as Record<string, unknown>).appliedVersion as number | undefined
+                  }))
                 }
               };
 

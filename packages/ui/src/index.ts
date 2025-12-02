@@ -72,6 +72,7 @@ export { default as BasicTestMode } from "./components/BasicTestMode.vue";
 export { default as VariableManagerModal } from "./components/variable/VariableManagerModal.vue";
 export { default as VariableEditor } from "./components/variable/VariableEditor.vue";
 export { default as VariableImporter } from "./components/variable/VariableImporter.vue";
+export { default as ToolManagerModal } from "./components/tool/ToolManagerModal.vue";
 export { default as ConversationManager } from "./components/context-mode/ConversationManager.vue";
 export { default as ContextEditor } from "./components/context-mode/ContextEditor.vue";
 export { default as TestAreaPanel } from "./components/TestAreaPanel.vue";
@@ -99,6 +100,8 @@ export { default as ContextModeActions } from "./components/context-mode/Context
 export { default as PromptPreviewPanel } from "./components/PromptPreviewPanel.vue";
 export { default as ContextSystemWorkspace } from "./components/context-mode/ContextSystemWorkspace.vue";
 export { default as ContextUserWorkspace } from "./components/context-mode/ContextUserWorkspace.vue";
+export { default as ContextUserTestPanel } from "./components/context-mode/ContextUserTestPanel.vue";
+export { default as ConversationTestPanel } from "./components/context-mode/ConversationTestPanel.vue";
 
 // 导出 Naive UI 组件 (解决组件解析问题)
 export {
@@ -197,9 +200,6 @@ export type {
 // 导出新增的类型和服务
 export * from "./types";
 export * from "./services";
-
-// 导出快速模板管理器
-export { quickTemplateManager } from "./data/quickTemplates";
 
 // 导出图像模式组件与核心图像服务（转发 core 能力）
 export { default as ImageWorkspace } from "./components/image-mode/ImageWorkspace.vue";

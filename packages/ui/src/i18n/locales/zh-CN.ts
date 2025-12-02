@@ -119,13 +119,18 @@ export default {
     imageMode: "图像",
   },
   contextMode: {
+    optimizationMode: {
+      message: "多消息",
+      variable: "变量",
+    },
     user: {
-      label: "用户模式",
+      label: "变量模式",
       tooltip: "优化单条用户提示词，专注于变量和工具配置",
     },
     system: {
-      label: "系统模式",
+      label: "多消息模式",
       tooltip: "优化多条系统消息，支持完整的对话管理",
+      selectMessageHint: "请选择一条 system/user 消息以查看 V0/V1 优化结果",
     },
     actions: {
       globalVariables: "全局变量",
@@ -587,7 +592,16 @@ export default {
       openEditor: "打开编辑器",
     },
     title: "会话管理",
+    optimizeMessage: "优化选中消息",
+    selectForOptimization: "选择此消息进行优化",
+    selected: "已选中",
     messageCount: "共 {count} 条消息",
+    stats: {
+      messages: "消息",
+      variables: "变量",
+      missing: "变量缺失",
+      tools: "工具",
+    },
     quickTemplates: "快速模板",
     clearAll: "清空全部",
     noMessages: "暂无会话消息",
@@ -1107,6 +1121,7 @@ export default {
     optimized: "优化后的提示词",
     optimizing: "优化中...",
     continueOptimize: "继续优化",
+    applyToConversation: "应用到会话",
     copy: "复制",
     applyToTest: "应用到测试",
     appliedToTest: "已应用到高级测试，会话模板已自动配置",
@@ -1164,6 +1179,9 @@ export default {
       compareFailed: "对比分析失败",
       noVersionsToCompare: "没有足够的版本进行对比",
       noPreviousVersion: "没有前一版本可供对比",
+      loadChainFailed: "加载优化历史失败",
+      historyUnavailable: "历史记录服务暂不可用",
+      invalidVersion: "无效的版本",
       testFailed: "测试失败",
       testError: "测试过程中发生错误",
       loadTemplatesFailed: "加载提示词失败",
@@ -1174,6 +1192,7 @@ export default {
       loadHistoryFailed: "加载历史记录失败",
       clearHistoryFailed: "清空历史记录失败",
       historyChainDeleteFailed: "删除历史记录失败",
+      historyRestoreFailed: "历史记录恢复失败：{error}",
       selectTemplateFailed: "选择提示词失败：{error}",
       noOptimizeTemplate: "请先选择优化提示词",
       noOptimizeModel: "请先选择优化模型",
@@ -1181,9 +1200,11 @@ export default {
       incompleteTestInfo: "请填写完整的测试信息",
       noDefaultTemplate: "无法加载默认提示词",
       optimizeProcessFailed: "优化过程出错",
+      promptServiceUnavailable: "优化服务暂不可用",
       testProcessError: "测试过程中发生错误",
       initTemplateFailed: "初始化模板选择失败",
       appInitFailed: "应用初始化失败，请刷新或联系支持",
+      loadRecordFailed: "加载版本内容失败",
     },
     success: {
       optimizeSuccess: "优化成功",
@@ -1196,15 +1217,32 @@ export default {
       historyLoaded: "历史记录已加载",
       exitCompare: "已退出对比模式",
       compareEnabled: "对比模式已启用",
+      optimizeAndApply: "已优化并应用 ({version})",
+      versionApplied: "已应用到会话",
+      chainAutoRestored: "已从历史记录自动恢复优化链",
+      imageHistoryRestored: "图像历史记录已恢复",
+      conversationRestored: "已从历史记录恢复完整会话",
     },
     warn: {
       loadOptimizeTemplateFailed: "加载已保存的优化提示词失败",
       loadIterateTemplateFailed: "加载已保存的迭代提示词失败",
     },
+    warning: {
+      cannotOptimizeRole: "无法优化 {role} 角色的消息",
+      saveHistoryFailed: "保存历史记录失败",
+      messageNotFound: "未找到消息",
+      noVersionSelected: "请先选择要应用的版本",
+      noContentToApply: "没有可应用的内容",
+      messageNotFoundInSnapshot: "历史记录恢复成功，但未找到被优化的消息",
+      restoredFromLegacyHistory: "从旧版本历史记录恢复（仅恢复被优化的消息）",
+      messageNotFoundInCurrentConversation: "当前会话中未找到被优化的消息，无法恢复",
+    },
     info: {
       modelUpdated: "模型已更新",
       templateSelected: "选择模板",
       optimizationModeAutoSwitched: "已自动切换到{mode}提示词优化模式",
+      switchedToImageMode: "已自动切换到图像模式",
+      multiTurnOptimizationPrompt: "多轮对话优化（{count}条消息）",
     },
   },
   log: {
@@ -1460,7 +1498,6 @@ export default {
 
     // Tab labels
     messagesTab: "消息编辑",
-    templatesTab: "快速模板",
     variablesTab: "变量管理",
     toolsTab: "工具管理",
 
@@ -1480,15 +1517,6 @@ export default {
     addTool: "添加工具",
     noDescription: "暂无描述",
     parametersCount: "{count} 个参数",
-
-    // Templates
-    templateCategory: "模板分类",
-    templateCount: "{count} 个模板",
-    noTemplates: "暂无模板",
-    noTemplatesHint: "在模板管理器中添加模板",
-    applyTemplate: "应用模板",
-    moreMessages: "还有 {count} 条消息...",
-    templateApplied: "已应用模板：{name}",
 
     // Import/Export
     importTitle: "导入上下文数据",
@@ -1557,22 +1585,21 @@ export default {
     // Import/Export formats
     importFormats: {
       smart: { name: "智能识别", description: "自动检测格式并转换" },
-      conversation: { name: "会话格式", description: "标准的会话消息格式" },
       openai: { name: "OpenAI", description: "OpenAI API 请求格式" },
       langfuse: { name: "LangFuse", description: "LangFuse 追踪数据格式" },
+      conversation: { name: "内部格式", description: "Prompt Optimizer 内部标准 JSON 结构" },
     },
     exportFormats: {
-      standard: { name: "标准格式", description: "内部标准数据格式" },
+      standard: { name: "内部格式", description: "Prompt Optimizer 内部标准数据格式" },
       openai: { name: "OpenAI", description: "OpenAI API 兼容格式" },
-      template: { name: "模板格式", description: "可复用的模板格式" },
     },
 
-    // Import placeholders
+    // Import placeholders (文本可本地化，JSON 示例固定为英文)
     importPlaceholders: {
-      openai: 'OpenAI API 请求格式，例如：\n{\n  "messages": [...],\n  "model": "gpt-4"\n}',
-      langfuse: 'LangFuse 追踪数据，例如：\n{\n  "input": {\n    "messages": [...]\n  }\n}',
-      conversation: '标准会话格式，例如：\n{\n  "messages": [\n    {"role": "system", "content": "..."},\n    {"role": "user", "content": "..."}\n  ]\n}',
-      smart: "粘贴任意支持格式的 JSON 数据，系统将自动识别",
+      openai: "OpenAI API 请求格式（示例见下方）：",
+      langfuse: "LangFuse 追踪数据格式（示例见下方）：",
+      conversation: "标准会话 JSON 格式（示例见下方）：",
+      smart: "粘贴任意受支持的 JSON（OpenAI、LangFuse 或会话数组），系统会自动识别格式。",
     },
 
     // Console errors (开发者日志)

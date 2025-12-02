@@ -3,10 +3,9 @@
  * 负责管理优化上下文、上下文变量、上下文编辑器等相关功能
  */
 
-import { ref, computed, watch, type Ref } from 'vue'
+import { ref, computed, watch, type Ref, type ComputedRef } from 'vue'
 
 import { useToast } from "../ui/useToast";
-import { quickTemplateManager } from "../../data/quickTemplates";
 import type {
   ConversationMessage,
   OptimizationMode,
@@ -18,7 +17,8 @@ import type { VariableManagerHooks } from "../prompt/useVariableManager";
 
 export interface ContextManagementOptions {
   services: Ref<AppServices | null>;
-  selectedOptimizationMode: Ref<OptimizationMode>;
+  /** @deprecated 建议传入 computed 值（从 basicSubMode/proSubMode 动态计算），不应直接管理此状态 */
+  selectedOptimizationMode: Ref<OptimizationMode> | ComputedRef<OptimizationMode>;
   advancedModeEnabled: Ref<boolean>;
   showContextEditor: Ref<boolean>;
   contextEditorDefaultTab: Ref<"messages" | "variables" | "tools">;
@@ -193,31 +193,6 @@ export function useContextManagement(options: ContextManagementOptions) {
         "[useContextManagement] Variable manager refresh failed:",
         e,
       );
-    }
-
-    // 若首次加载且高级模式开启且当前无会话消息，灌入默认模板
-    if (
-      advancedModeEnabled.value &&
-      !isContextLoaded.value &&
-      (!optimizationContext.value || optimizationContext.value.length === 0)
-    ) {
-      try {
-        const defaultTemplate = quickTemplateManager.getTemplate(
-          selectedOptimizationMode.value,
-          "default",
-        );
-        if (defaultTemplate?.messages?.length) {
-          optimizationContext.value = [...defaultTemplate.messages];
-          console.log(
-            `[useContextManagement] Auto-filled default template for ${selectedOptimizationMode.value}`,
-          );
-        }
-      } catch (e) {
-        console.warn(
-          "[useContextManagement] Failed to auto-fill default template:",
-          e,
-        );
-      }
     }
 
     // 设置初始状态

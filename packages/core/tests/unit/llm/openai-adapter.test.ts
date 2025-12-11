@@ -1,14 +1,23 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OpenAIAdapter } from '../../../src/services/llm/adapters/openai-adapter';
 import type { TextModelConfig, Message } from '../../../src/services/llm/types';
-import OpenAI from 'openai';
 
-// Mock OpenAI SDK
-vi.mock('openai');
+// 创建 mock OpenAI 实例
+let mockOpenAIInstance: any;
+
+// Mock OpenAI SDK - 使用工厂函数返回一个类
+vi.mock('openai', () => {
+  return {
+    default: class MockOpenAI {
+      constructor() {
+        return mockOpenAIInstance;
+      }
+    }
+  };
+});
 
 describe('OpenAIAdapter', () => {
   let adapter: OpenAIAdapter;
-  let mockOpenAIInstance: any;
 
   const mockConfig: TextModelConfig = {
     id: 'openai',
@@ -31,14 +40,14 @@ describe('OpenAIAdapter', () => {
       }
     },
     modelMeta: {
-      id: 'gpt-5-2025-08-07',
-      name: 'GPT-5',
-      description: 'Latest GPT-5 model',
+      id: 'gpt-5-mini',
+      name: 'GPT-5 Mini',
+      description: 'Fast, capable, and efficient small model',
       providerId: 'openai',
       capabilities: {
         supportsTools: true,
         supportsReasoning: false,
-        maxContextLength: 128000
+        maxContextLength: 1047576
       },
       parameterDefinitions: [
         {
@@ -69,7 +78,7 @@ describe('OpenAIAdapter', () => {
     adapter = new OpenAIAdapter();
     vi.clearAllMocks();
 
-    // 创建 mock OpenAI 实例
+    // 在每个测试前重新创建 mock OpenAI 实例
     mockOpenAIInstance = {
       chat: {
         completions: {
@@ -109,12 +118,12 @@ describe('OpenAIAdapter', () => {
       expect(Array.isArray(models)).toBe(true);
       expect(models.length).toBeGreaterThan(0);
 
-      // 验证至少包含 GPT-5
-      const gpt5 = models.find(m => m.id === 'gpt-5-2025-08-07');
-      expect(gpt5).toBeDefined();
-      expect(gpt5?.name).toBe('GPT-5');
-      expect(gpt5?.providerId).toBe('openai');
-      expect(gpt5?.capabilities.supportsTools).toBe(true);
+      // 验证至少包含 GPT-5 Mini
+      const gpt5Mini = models.find(m => m.id === 'gpt-5-mini');
+      expect(gpt5Mini).toBeDefined();
+      expect(gpt5Mini?.name).toBe('GPT-5 Mini');
+      expect(gpt5Mini?.providerId).toBe('openai');
+      expect(gpt5Mini?.capabilities.supportsTools).toBe(true);
     });
 
     it('should have capabilities for each model', () => {
@@ -175,8 +184,6 @@ describe('OpenAIAdapter', () => {
         }
       };
 
-      // Mock OpenAI constructor to return our mock instance
-      vi.mocked(OpenAI).mockImplementation(() => mockOpenAIInstance as any);
       mockOpenAIInstance.chat.completions.create.mockResolvedValue(mockResponse);
 
       const response = await adapter.sendMessage(mockMessages, mockConfig);
@@ -184,7 +191,7 @@ describe('OpenAIAdapter', () => {
       expect(response.content).toBe('Hello! How can I help you?');
       expect(response.reasoning).toBeUndefined();
       expect(response.metadata).toEqual({
-        model: 'gpt-5-2025-08-07',
+        model: 'gpt-5-mini',
         finishReason: 'stop'
       });
     });
@@ -193,7 +200,6 @@ describe('OpenAIAdapter', () => {
       const originalError = new Error('OpenAI API Error');
       originalError.stack = 'Original Stack Trace';
 
-      vi.mocked(OpenAI).mockImplementation(() => mockOpenAIInstance as any);
       mockOpenAIInstance.chat.completions.create.mockRejectedValue(originalError);
 
       try {
@@ -237,7 +243,6 @@ describe('OpenAIAdapter', () => {
         }
       };
 
-      vi.mocked(OpenAI).mockImplementation(() => mockOpenAIInstance as any);
       mockOpenAIInstance.chat.completions.create.mockResolvedValue(mockStream);
 
       const callbacks = {
@@ -282,9 +287,8 @@ describe('OpenAIAdapter', () => {
         }
       };
 
-      vi.mocked(OpenAI).mockImplementation(() => {
-        throw new Error('Invalid URL');
-      });
+      // 模拟 API 调用失败
+      mockOpenAIInstance.chat.completions.create.mockRejectedValue(new Error('Invalid URL'));
 
       await expect(
         adapter.sendMessage(mockMessages, configWithInvalidURL)

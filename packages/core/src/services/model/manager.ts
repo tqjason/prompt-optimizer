@@ -1,7 +1,7 @@
 import { IModelManager, ModelConfig, TextModelConfig } from './types';
 import { IStorageProvider } from '../storage/types';
 import { StorageAdapter } from '../storage/adapter';
-import { defaultModels } from './defaults';
+import { getAllModels, getBuiltinModelIds } from './defaults';
 import { ModelConfigError } from '../llm/errors';
 import { validateOverrides } from './parameter-utils';
 import { ElectronConfigManager, isElectronRenderer } from './electron-config';
@@ -126,6 +126,20 @@ export class ModelManager implements IModelManager {
                   hasUpdates = true;
                   console.log(`[ModelManager] Patched missing metadata for model: ${key}`);
                 }
+
+                // 检查是否需要自动注入 apiKey 并启用内置模型
+                if (this.shouldAutoEnableBuiltinModel(key, updatedModel, defaultConfig)) {
+                  updatedModels[key] = {
+                    ...updatedModel,
+                    connectionConfig: {
+                      ...(updatedModel.connectionConfig || {}),
+                      apiKey: defaultConfig.connectionConfig?.apiKey
+                    },
+                    enabled: true
+                  };
+                  hasUpdates = true;
+                  console.log(`[ModelManager] Auto-enabled builtin model with new API key: ${key}`);
+                }
               } else if (isLegacyConfig(existingModel)) {
                 // 旧格式，尝试使用 Registry 转换为新格式
                 try {
@@ -179,20 +193,20 @@ export class ModelManager implements IModelManager {
 
   /**
    * 获取默认模型配置（返回TextModelConfig格式）
+   * 注意：每次调用都会重新计算，确保环境变量变化能被感知
    */
   private getDefaultModels(): Record<string, TextModelConfig> {
     // 在Electron环境下使用配置管理器生成配置
     if (isElectronRenderer()) {
       const configManager = ElectronConfigManager.getInstance();
       if (configManager.isInitialized()) {
-        // ElectronConfigManager需要更新以返回TextModelConfig
-        // 目前先使用fallback
-        console.warn('[ModelManager] ElectronConfigManager返回旧格式，使用fallback defaults');
+        // ElectronConfigManager 已支持 getAllModels()
+        return configManager.generateDefaultModels();
       }
     }
 
-    // 使用新的TextModelConfig格式默认配置
-    return defaultModels;
+    // 调用函数重新计算（而非使用静态常量），确保环境变量变化能被感知
+    return getAllModels();
   }
 
   /**
@@ -505,6 +519,41 @@ export class ModelManager implements IModelManager {
         };
       }
     );
+  }
+
+  /**
+   * 判断是否应该自动启用内置模型
+   * 条件：内置模型 + 存储的 apiKey 为空 + enabled 为 false + 新配置有 apiKey
+   */
+  private shouldAutoEnableBuiltinModel(
+    modelId: string,
+    storedConfig: TextModelConfig,
+    defaultConfig: TextModelConfig
+  ): boolean {
+    // 1. 必须是内置模型
+    const builtinIds = getBuiltinModelIds();
+    if (!builtinIds.includes(modelId)) {
+      return false;
+    }
+
+    // 2. 存储的配置必须是禁用状态
+    if (storedConfig.enabled !== false) {
+      return false;
+    }
+
+    // 3. 存储的 apiKey 必须为空
+    const storedApiKey = storedConfig.connectionConfig?.apiKey?.trim() || '';
+    if (storedApiKey !== '') {
+      return false;
+    }
+
+    // 4. 新的默认配置必须有 apiKey
+    const newApiKey = defaultConfig.connectionConfig?.apiKey?.trim() || '';
+    if (newApiKey === '') {
+      return false;
+    }
+
+    return true;
   }
 
   /**

@@ -9,27 +9,27 @@ interface ModelOverride {
   defaultParameterValues?: Record<string, unknown>
 }
 
-const ZHIPU_STATIC_MODELS: ModelOverride[] = [
+const OPENROUTER_STATIC_MODELS: ModelOverride[] = [
   {
-    id: 'glm-4.6',
-    name: 'GLM-4.6',
-    description: 'GLM-4.6 是最新的旗舰模型系列，专为智能体应用打造的基础模型',
+    id: 'google/gemma-3-27b-it:free',
+    name: 'Gemma 3 27B IT (Free)',
+    description: 'Google Gemma 3 27B 免费模型，通过 OpenRouter 访问',
     capabilities: {
       supportsTools: true,
-      supportsReasoning: true,
-      maxContextLength: 128000
+      supportsReasoning: false,
+      maxContextLength: 96000
     }
   }
 ]
 
-export class ZhipuAdapter extends OpenAIAdapter {
+export class OpenRouterAdapter extends OpenAIAdapter {
   public getProvider(): TextProvider {
     return {
-      id: 'zhipu',
-      name: 'Zhipu AI',
-      description: 'Zhipu GLM OpenAI-compatible models',
+      id: 'openrouter',
+      name: 'OpenRouter',
+      description: 'OpenRouter 聚合多种 AI 模型的 OpenAI 兼容 API',
       requiresApiKey: true,
-      defaultBaseURL: 'https://open.bigmodel.cn/api/paas/v4',
+      defaultBaseURL: 'https://openrouter.ai/api/v1',
       supportsDynamicModels: true,
       connectionSchema: {
         required: ['apiKey'],
@@ -43,7 +43,7 @@ export class ZhipuAdapter extends OpenAIAdapter {
   }
 
   public getModels(): TextModel[] {
-    return ZHIPU_STATIC_MODELS.map((definition) => {
+    return OPENROUTER_STATIC_MODELS.map((definition) => {
       const baseModel = this.buildDefaultModel(definition.id)
 
       return {

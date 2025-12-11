@@ -403,7 +403,7 @@ const refreshModels = async () => {
       count: models.value.length
     }
     toast.success(t('image.model.refreshSuccess'))
-  } catch (error) {
+  } catch (_error) {
     modelLoadingStatus.value = { type: 'error', messageKey: 'image.model.refreshError' }
     toast.error(t('image.model.refreshError'))
   } finally {
@@ -411,18 +411,10 @@ const refreshModels = async () => {
   }
 }
 
-// 处理模型变更（只在非编辑模式或用户主动切换时自动填充参数）
+// 处理模型变更：无论新建还是编辑模式，切换模型都应用新模型的默认参数
+// （编辑模式会合并参数，保留用户已有配置；创建模式会替换参数）
 const handleModelChange = (modelId: string) => {
-  // 如果在编辑模式，检查是否已经加载了参数
-  // 通过检查 configForm 是否有 id 来判断是初始加载还是用户主动切换
-  if (isEditing.value && configForm.value.id) {
-    // 编辑模式：只更新 modelId，不自动填充参数
-    selectedModelId.value = modelId
-    configForm.value.modelId = modelId
-  } else {
-    // 新建模式或初次加载：调用 onModelChange，会自动填充默认参数
-    onModelChange(modelId)
-  }
+  onModelChange(modelId)
 }
 
 const save = async () => {
@@ -433,7 +425,7 @@ const save = async () => {
     toast.success(isEditing.value ? t('image.config.updateSuccess') : t('image.config.createSuccess'))
     emit('saved')
     close()
-  } catch (error) {
+  } catch (_error) {
     console.error('保存配置失败:', error)
     toast.error(t('image.config.saveFailed'))
   }
@@ -441,9 +433,7 @@ const save = async () => {
 
 // 监听 props 变化
 watch(() => props.show, async (newShow) => {
-  console.log('[ImageModelEditModal] props.show changed:', newShow)
   if (newShow) {
-    console.log('[ImageModelEditModal] Modal opening, starting data preparation...')
     // 打开时准备数据
     try {
       // 确保提供商数据最新（每次打开都刷新）
@@ -458,8 +448,12 @@ watch(() => props.show, async (newShow) => {
           selectedProviderId.value = existing.providerId
           selectedModelId.value = existing.modelId
           // 然后再调用 handleProviderChange，此时 connectionConfig 已经可用
-          // 编辑模式：不自动选择第一个模型，保持已保存的自定义模型ID
-          await handleProviderChange(existing.providerId, false)
+          // 编辑模式：不自动选择第一个模型，不重置连接配置，保持已保存的数据
+          await handleProviderChange(existing.providerId, {
+            autoSelectFirstModel: false,
+            resetOverrides: false,
+            resetConnectionConfig: false
+          })
           // 等待一帧以确保下拉可见
           await nextTick()
         }
@@ -502,8 +496,12 @@ watch(() => props.configId, async (newConfigId) => {
         selectedProviderId.value = existing.providerId
         selectedModelId.value = existing.modelId
         // 然后再调用 handleProviderChange，此时 connectionConfig 已经可用
-        // 编辑模式：不自动选择第一个模型，保持已保存的自定义模型ID
-        await handleProviderChange(existing.providerId, false)
+        // 编辑模式：不自动选择第一个模型，不重置连接配置，保持已保存的数据
+        await handleProviderChange(existing.providerId, {
+          autoSelectFirstModel: false,
+          resetOverrides: false,
+          resetConnectionConfig: false
+        })
         await nextTick()
       }
     } catch (e) {

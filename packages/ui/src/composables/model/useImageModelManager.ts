@@ -11,6 +11,7 @@ import type {
   IImageService
 } from '@prompt-optimizer/core'
 import { useModelAdvancedParameters } from './useModelAdvancedParameters'
+import { computeConnectionConfig, normalizeProviderChangeOptions } from './useConnectionConfig'
 
 type EditableImageModelConfig = Omit<ImageModelConfig, 'provider' | 'model'> & {
   provider?: ImageProvider
@@ -203,16 +204,9 @@ export function useImageModelManager() {
   // 提供商变更处理（按spec设计的渐进式体验）
   const onProviderChange = async (
     providerId: string,
-    options: boolean | { autoSelectFirstModel?: boolean; resetOverrides?: boolean } = true
+    options: boolean | { autoSelectFirstModel?: boolean; resetOverrides?: boolean; resetConnectionConfig?: boolean } = true
   ) => {
-    const normalized =
-      typeof options === 'boolean'
-        ? { autoSelectFirstModel: options, resetOverrides: options }
-        : {
-            autoSelectFirstModel: options.autoSelectFirstModel ?? true,
-            resetOverrides:
-              options.resetOverrides ?? (options.autoSelectFirstModel ?? true)
-          }
+    const normalized = normalizeProviderChangeOptions(options)
 
     selectedProviderId.value = providerId
     configForm.value.providerId = providerId
@@ -238,14 +232,13 @@ export function useImageModelManager() {
       return
     }
 
-    // 更新默认API地址
+    // 使用共享函数处理连接配置
     const providerMeta = providers.value.find(p => p.id === providerId)
-    if (providerMeta?.defaultBaseURL) {
-      configForm.value.connectionConfig = {
-        baseURL: (configForm.value.connectionConfig?.baseURL) || providerMeta.defaultBaseURL,
-        ...(configForm.value.connectionConfig || {})
-      }
-    }
+    configForm.value.connectionConfig = computeConnectionConfig(
+      configForm.value.connectionConfig,
+      providerMeta,
+      normalized.resetConnectionConfig
+    )
 
     // 1. 立即显示静态模型（即时响应）
     try {
@@ -257,6 +250,10 @@ export function useImageModelManager() {
         const firstModel = staticModels[0]
         selectedModelId.value = firstModel.id
         configForm.value.modelId = firstModel.id
+        // 切换提供商后自动应用第一个模型的默认参数
+        if (firstModel.id && providerId) {
+          applyDefaultsFromModel(false)
+        }
 
         modelLoadingStatus.value = {
           type: 'success',
@@ -585,7 +582,10 @@ export function useImageModelManager() {
     configForm.value.modelId = modelId
 
     if (modelId && selectedProviderId.value) {
-      applyDefaultsFromModel()
+      // 编辑模式（configForm.id 存在）：合并参数（保留用户已有配置）
+      // 创建模式：替换参数（使用新模型的默认值）
+      const isEditing = !!configForm.value.id
+      applyDefaultsFromModel(isEditing)
     }
   }
 

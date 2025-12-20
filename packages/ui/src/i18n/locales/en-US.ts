@@ -58,6 +58,8 @@ export default {
     iterate: "Iterate",
     system: "System",
     user: "User",
+    basic: "Basic",
+    context: "Context",
     copySuccess: "Copied to clipboard",
     copyFailed: "Copy Failed",
     appName: "Prompt Optimizer",
@@ -456,6 +458,8 @@ export default {
     contextTitle: "Optimization Context",
     contextDescription:
       "Provide conversation background for optimization to help AI better understand optimization goals",
+    enterPrompt: "Enter Prompt",
+    placeholder: "Enter the prompt you want to optimize...",
   },
   variables: {
     title: "Variable Manager",
@@ -729,6 +733,7 @@ export default {
     title: "Model Manager",
     textModels: "Text Models",
     imageModels: "Image Models",
+    functionModels: "Function Models",
     modelList: "Model List",
     testConnection: "Test Connection",
     editModel: "Edit",
@@ -863,6 +868,10 @@ export default {
     saveEditAriaLabel: "Save model changes",
     cancelAddAriaLabel: "Cancel adding model",
     confirmAddAriaLabel: "Confirm add model",
+  },
+  functionModel: {
+    evaluationModel: "Evaluation Model",
+    evaluationModelHint: "Used for LLM evaluation, defaults to global optimization model",
   },
   templateManager: {
     title: "Template Manager",
@@ -1035,6 +1044,7 @@ export default {
       enable: "Enable Compare",
       disable: "Disable Compare",
     },
+    compareMode: "Compare Mode",
     originalResult: "Original Prompt Result",
     optimizedResult: "Optimized Prompt Result",
     testResult: "Test Result",
@@ -1258,6 +1268,8 @@ export default {
       chainAutoRestored: "Optimization chain automatically restored from history",
       imageHistoryRestored: "Image history restored",
       conversationRestored: "Complete conversation restored from history",
+      imageFavoriteLoaded: "Favorite image prompt loaded",
+      favoriteLoaded: "Prompt loaded to input",
     },
     warn: {
       loadOptimizeTemplateFailed: "Failed to load saved optimization template",
@@ -1279,6 +1291,7 @@ export default {
       optimizationModeAutoSwitched:
         "Automatically switched to {mode} prompt optimization mode",
       switchedToImageMode: "Automatically switched to image mode",
+      switchedToFunctionMode: "Automatically switched to {mode} mode",
       multiTurnOptimizationPrompt: "Multi-turn conversation optimization ({count} messages)",
     },
   },
@@ -2044,5 +2057,54 @@ export default {
   variableGuide: {
     inlineHint:
       "Variable support: Type {doubleBraces} for auto-completion · Select text to extract · Hover to view values",
+  },
+  // LLM Intelligent Evaluation
+  evaluation: {
+    button: "Evaluate",
+    evaluate: "Evaluate",
+    reEvaluate: "Re-evaluate",
+    compareEvaluate: "Compare",
+    loading: "Evaluating...",
+    analyzing: "Analyzing...",
+    overallScore: "Overall",
+    dimensions: "Dimension Scores",
+    issues: "Issues",
+    improvements: "Improvements",
+    applyToIterate: "Apply",
+    applySuccess: "Applying improvement...",
+    noResult: "No evaluation result yet. Click the evaluate button to start.",
+    viewDetails: "View Details",
+    title: {
+      default: "Evaluation Result",
+      original: "Original Prompt Evaluation",
+      optimized: "Optimized Prompt Evaluation",
+      compare: "Comparison Evaluation",
+    },
+    type: {
+      original: "Evaluate Original Prompt",
+      optimized: "Evaluate Optimization",
+      compare: "Compare Evaluation",
+    },
+    level: {
+      excellent: "Excellent",
+      good: "Good",
+      acceptable: "Acceptable",
+      poor: "Poor",
+      veryPoor: "Very Poor",
+    },
+    dimension: {
+      goalAchievement: "Goal Achievement",
+      outputQuality: "Output Quality",
+      formatCompliance: "Format Compliance",
+      relevance: "Relevance",
+    },
+    optimizedBetter: "Optimized version is better",
+    originalBetter: "Original version is better",
+    error: {
+      title: "Evaluation Failed",
+      serviceNotReady: "Evaluation service not ready, please try again later",
+      failed: "Evaluation failed: {error}",
+      noOptimizedPrompt: "No prompt to optimize",
+    },
   },
 };

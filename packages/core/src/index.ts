@@ -145,6 +145,8 @@ export {
   MODEL_SELECTION_KEYS,
   TEMPLATE_SELECTION_KEYS,
   IMAGE_MODE_KEYS,
+  FUNCTION_MODEL_KEYS,
+  getModeModelKey,
   ALL_STORAGE_KEYS,
   ALL_STORAGE_KEYS_ARRAY
 } from './constants/storage-keys'
@@ -154,6 +156,7 @@ export type {
   ModelSelectionKey,
   TemplateSelectionKey,
   ImageModeKey,
+  FunctionModelKey,
   StorageKey
 } from './constants/storage-keys'
 
@@ -172,3 +175,8 @@ export * from './services/favorite/errors'
 
 // 导出高级模块相关类型
 export * from './types/advanced'
+
+// 导出评估服务相关
+export * from './services/evaluation/types'
+export * from './services/evaluation/errors'
+export { EvaluationService, createEvaluationService } from './services/evaluation/service'

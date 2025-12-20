@@ -1,4 +1,4 @@
-﻿const favoriteCategoriesMessages = {
+const favoriteCategoriesMessages = {
   default: {
     uncategorized: "未分类",
     uncategorizedDesc: "默认分类",
@@ -57,6 +57,8 @@ export default {
     iterate: "迭代",
     system: "系统",
     user: "用户",
+    basic: "基础",
+    context: "上下文",
     copySuccess: "复制成功",
     copyFailed: "复制失败",
     appName: "提示词优化器",
@@ -441,6 +443,8 @@ export default {
     contextHelp: "在高级模式下，您可以添加会话上下文来帮助AI更好地理解优化需求",
     contextTitle: "优化上下文",
     contextDescription: "为优化提供会话背景，帮助AI更好地理解优化目标",
+    enterPrompt: "输入提示词",
+    placeholder: "请输入需要优化的提示词...",
   },
   variables: {
     title: "变量管理",
@@ -709,6 +713,7 @@ export default {
     title: "模型管理",
     textModels: "文本模型",
     imageModels: "图像模型",
+    functionModels: "功能模型",
     modelList: "模型列表",
     testConnection: "测试连接",
     editModel: "编辑",
@@ -836,6 +841,10 @@ export default {
     saveEditAriaLabel: "保存模型修改",
     cancelAddAriaLabel: "取消添加模型",
     confirmAddAriaLabel: "确认添加模型",
+  },
+  functionModel: {
+    evaluationModel: "评估模型",
+    evaluationModelHint: "用于 LLM 智能评估，默认使用全局优化模型",
   },
   templateManager: {
     title: "功能提示词管理",
@@ -1003,6 +1012,7 @@ export default {
       enable: "开启对比",
       disable: "关闭对比",
     },
+    compareMode: "对比模式",
     originalResult: "原始提示词结果",
     optimizedResult: "优化后提示词结果",
     testResult: "测试结果",
@@ -1222,6 +1232,8 @@ export default {
       chainAutoRestored: "已从历史记录自动恢复优化链",
       imageHistoryRestored: "图像历史记录已恢复",
       conversationRestored: "已从历史记录恢复完整会话",
+      imageFavoriteLoaded: "收藏的图像提示词已加载",
+      favoriteLoaded: "已将提示词加载到输入框",
     },
     warn: {
       loadOptimizeTemplateFailed: "加载已保存的优化提示词失败",
@@ -1242,6 +1254,7 @@ export default {
       templateSelected: "选择模板",
       optimizationModeAutoSwitched: "已自动切换到{mode}提示词优化模式",
       switchedToImageMode: "已自动切换到图像模式",
+      switchedToFunctionMode: "已自动切换到{mode}模式",
       multiTurnOptimizationPrompt: "多轮对话优化（{count}条消息）",
     },
   },
@@ -1972,5 +1985,54 @@ export default {
   variableGuide: {
     inlineHint:
       "支持变量功能：输入 {doubleBraces} 触发自动补全 · 选中文本可提取为变量 · 悬停查看变量值",
+  },
+  // LLM 智能评估
+  evaluation: {
+    button: "评估",
+    evaluate: "评估",
+    reEvaluate: "重新评估",
+    compareEvaluate: "对比评估",
+    loading: "正在评估中...",
+    analyzing: "正在分析...",
+    overallScore: "总分",
+    dimensions: "维度评分",
+    issues: "问题",
+    improvements: "改进建议",
+    applyToIterate: "应用",
+    applySuccess: "正在应用改进建议...",
+    noResult: "暂无评估结果，点击评估按钮开始评估",
+    viewDetails: "查看详情",
+    title: {
+      default: "评估结果",
+      original: "原始提示词评估",
+      optimized: "优化后评估",
+      compare: "对比评估",
+    },
+    type: {
+      original: "评估原始提示词",
+      optimized: "评估优化效果",
+      compare: "对比评估",
+    },
+    level: {
+      excellent: "优秀",
+      good: "良好",
+      acceptable: "合格",
+      poor: "较差",
+      veryPoor: "很差",
+    },
+    dimension: {
+      goalAchievement: "目标达成度",
+      outputQuality: "输出质量",
+      formatCompliance: "格式规范性",
+      relevance: "相关性",
+    },
+    optimizedBetter: "优化后效果更好",
+    originalBetter: "原始效果更好",
+    error: {
+      title: "评估失败",
+      serviceNotReady: "评估服务未就绪，请稍后再试",
+      failed: "评估失败：{error}",
+      noOptimizedPrompt: "没有可优化的提示词",
+    },
   },
 };

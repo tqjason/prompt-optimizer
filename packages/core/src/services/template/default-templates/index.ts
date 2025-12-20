@@ -13,14 +13,14 @@ import { template as analytical_optimize } from './optimize/analytical-optimize'
 import { template as analytical_optimize_en } from './optimize/analytical-optimize_en';
 import { template as context_iterate } from './iterate/context/context-iterate';
 import { template as context_iterate_en } from './iterate/context/context-iterate_en';
-// 新增对齐的系统上下文模板：分析型/输出格式（中/英）
+// 上下文消息优化模板（多轮对话模式专用）- 通用模板优先
+import { template as context_message_optimize } from './optimize/context/context-message-optimize';
+import { template as context_message_optimize_en } from './optimize/context/context-message-optimize_en';
+// 上下文消息优化模板：分析型/输出格式（中/英）
 import { template as context_analytical_optimize } from './optimize/context/context-analytical-optimize';
 import { template as context_analytical_optimize_en } from './optimize/context/context-analytical-optimize_en';
 import { template as context_output_format_optimize } from './optimize/context/context-output-format-optimize';
 import { template as context_output_format_optimize_en } from './optimize/context/context-output-format-optimize_en';
-// 新增消息优化模板（多轮对话模式专用）
-import { template as context_message_optimize } from './optimize/context/context-message-optimize';
-import { template as context_message_optimize_en } from './optimize/context/context-message-optimize_en';
 // 新增对齐的用户上下文模板（基础/专业/规划）（中/英）
 import { template as context_user_prompt_basic } from './user-optimize/context/context-user-prompt-basic';
 import { template as context_user_prompt_basic_en } from './user-optimize/context/context-user-prompt-basic_en';
@@ -58,6 +58,35 @@ import { template as image2image_design_text_edit_optimize_en } from './image-op
 import { template as image_iterate_general } from './image-optimize/iterate/image-iterate-general';
 import { template as image_iterate_general_en } from './image-optimize/iterate/image-iterate-general_en';
 
+// 评估模板 - 基础模式/系统提示词
+import { template as evaluation_basic_system_original } from './evaluation/basic/system/evaluation-original';
+import { template as evaluation_basic_system_original_en } from './evaluation/basic/system/evaluation-original_en';
+import { template as evaluation_basic_system_optimized } from './evaluation/basic/system/evaluation-optimized';
+import { template as evaluation_basic_system_optimized_en } from './evaluation/basic/system/evaluation-optimized_en';
+import { template as evaluation_basic_system_compare } from './evaluation/basic/system/evaluation-compare';
+import { template as evaluation_basic_system_compare_en } from './evaluation/basic/system/evaluation-compare_en';
+// 评估模板 - 基础模式/用户提示词
+import { template as evaluation_basic_user_original } from './evaluation/basic/user/evaluation-original';
+import { template as evaluation_basic_user_original_en } from './evaluation/basic/user/evaluation-original_en';
+import { template as evaluation_basic_user_optimized } from './evaluation/basic/user/evaluation-optimized';
+import { template as evaluation_basic_user_optimized_en } from './evaluation/basic/user/evaluation-optimized_en';
+import { template as evaluation_basic_user_compare } from './evaluation/basic/user/evaluation-compare';
+import { template as evaluation_basic_user_compare_en } from './evaluation/basic/user/evaluation-compare_en';
+// 评估模板 - 高级模式/系统提示词（多消息模式）
+import { template as evaluation_pro_system_original } from './evaluation/pro/system/evaluation-original';
+import { template as evaluation_pro_system_original_en } from './evaluation/pro/system/evaluation-original_en';
+import { template as evaluation_pro_system_optimized } from './evaluation/pro/system/evaluation-optimized';
+import { template as evaluation_pro_system_optimized_en } from './evaluation/pro/system/evaluation-optimized_en';
+import { template as evaluation_pro_system_compare } from './evaluation/pro/system/evaluation-compare';
+import { template as evaluation_pro_system_compare_en } from './evaluation/pro/system/evaluation-compare_en';
+// 评估模板 - 高级模式/用户提示词（变量模式）
+import { template as evaluation_pro_user_original } from './evaluation/pro/user/evaluation-original';
+import { template as evaluation_pro_user_original_en } from './evaluation/pro/user/evaluation-original_en';
+import { template as evaluation_pro_user_optimized } from './evaluation/pro/user/evaluation-optimized';
+import { template as evaluation_pro_user_optimized_en } from './evaluation/pro/user/evaluation-optimized_en';
+import { template as evaluation_pro_user_compare } from './evaluation/pro/user/evaluation-compare';
+import { template as evaluation_pro_user_compare_en } from './evaluation/pro/user/evaluation-compare_en';
+
 // 简单的模板集合 - 模板自身已包含完整信息（id、name、language、type等）
 export const ALL_TEMPLATES = {
   general_optimize,
@@ -68,12 +97,12 @@ export const ALL_TEMPLATES = {
   analytical_optimize_en,
   context_iterate,
   context_iterate_en,
+  context_message_optimize,
+  context_message_optimize_en,
   context_analytical_optimize,
   context_analytical_optimize_en,
   context_output_format_optimize,
   context_output_format_optimize_en,
-  context_message_optimize,
-  context_message_optimize_en,
   context_user_prompt_basic,
   context_user_prompt_basic_en,
   context_user_prompt_professional_ctx,
@@ -105,4 +134,32 @@ export const ALL_TEMPLATES = {
   // 图像迭代模板
   image_iterate_general,
   image_iterate_general_en,
+  // 评估模板 - 基础模式/系统提示词
+  evaluation_basic_system_original,
+  evaluation_basic_system_original_en,
+  evaluation_basic_system_optimized,
+  evaluation_basic_system_optimized_en,
+  evaluation_basic_system_compare,
+  evaluation_basic_system_compare_en,
+  // 评估模板 - 基础模式/用户提示词
+  evaluation_basic_user_original,
+  evaluation_basic_user_original_en,
+  evaluation_basic_user_optimized,
+  evaluation_basic_user_optimized_en,
+  evaluation_basic_user_compare,
+  evaluation_basic_user_compare_en,
+  // 评估模板 - 高级模式/系统提示词（多消息模式）
+  evaluation_pro_system_original,
+  evaluation_pro_system_original_en,
+  evaluation_pro_system_optimized,
+  evaluation_pro_system_optimized_en,
+  evaluation_pro_system_compare,
+  evaluation_pro_system_compare_en,
+  // 评估模板 - 高级模式/用户提示词（变量模式）
+  evaluation_pro_user_original,
+  evaluation_pro_user_original_en,
+  evaluation_pro_user_optimized,
+  evaluation_pro_user_optimized_en,
+  evaluation_pro_user_compare,
+  evaluation_pro_user_compare_en,
 };

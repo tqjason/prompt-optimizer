@@ -97,6 +97,7 @@
             >
                 <template v-if="displayAdapter.isInMessageOptimizationMode.value">
                     <PromptPanelUI
+                        ref="promptPanelRef"
                         :original-prompt="displayAdapter.displayedOriginalPrompt.value"
                         :optimized-prompt="displayAdapter.displayedOptimizedPrompt.value"
                         :reasoning="optimizedReasoning"
@@ -131,148 +132,120 @@
         </NFlex>
 
         <!-- 右侧：测试区域 -->
-        <NFlex
-            vertical
+        <ConversationTestPanel
+            ref="testAreaPanelRef"
             :style="{
                 flex: 1,
                 overflow: 'auto',
                 height: '100%',
-                gap: '12px',
+                minHeight: 0,
             }"
+            :optimization-mode="optimizationMode"
+            :is-test-running="conversationTester.testResults.isTestingOriginal || conversationTester.testResults.isTestingOptimized"
+            :is-compare-mode="isCompareMode"
+            :enable-compare-mode="true"
+            @update:isCompareMode="emit('update:isCompareMode', $event)"
+            @compare-toggle="emit('compare-toggle')"
+            :model-name="props.testModelName"
+            :global-variables="globalVariables"
+            :predefined-variables="predefinedVariables"
+            :temporary-variables="tempVars.temporaryVariables.value"
+            :input-mode="inputMode"
+            :button-size="buttonSize"
+            :result-vertical-layout="resultVerticalLayout"
+            @test="handleTestWithVariables"
+            @open-variable-manager="emit('open-variable-manager')"
+            @open-global-variables="emit('open-global-variables')"
+            @variable-change="handleVariableChange"
+            @save-to-global="(name: string, value: string) => emit('save-to-global', name, value)"
+            @temporary-variable-remove="handleVariableRemove"
+            @temporary-variables-clear="handleVariablesClear"
+            v-bind="evaluationHandler.testAreaEvaluationProps.value"
+            @evaluate-original="evaluationHandler.handlers.onEvaluateOriginal"
+            @evaluate-optimized="evaluationHandler.handlers.onEvaluateOptimized"
+            @show-original-detail="evaluationHandler.handlers.onShowOriginalDetail"
+            @show-optimized-detail="evaluationHandler.handlers.onShowOptimizedDetail"
+            @apply-improvement="handleApplyImprovement"
         >
-            <!-- 测试区域操作栏 -->
-            <NCard size="small" :style="{ flexShrink: 0 }">
-                <NFlex justify="space-between" align="center">
-                    <!-- 左侧：区域标识 -->
-                    <NFlex align="center" :size="8">
-                        <NText strong>{{ $t("test.areaTitle") }}</NText>
-                    </NFlex>
+            <!-- 模型选择插槽 -->
+            <template #model-select>
+                <slot name="test-model-select"></slot>
+            </template>
 
-                    <!-- 右侧：快捷操作按钮 -->
-                    <NFlex :size="8">
-                        <NButton
-                            size="small"
-                            quaternary
-                            @click="emit('open-global-variables')"
-                            :title="$t('contextMode.actions.globalVariables')"
-                        >
-                            <template #icon><span>📊</span></template>
-                            <span v-if="!isMobile">{{
-                                $t("contextMode.actions.globalVariables")
-                            }}</span>
-                        </NButton>
-                    </NFlex>
-                </NFlex>
-            </NCard>
+            <!-- 对比模式结果插槽 -->
+            <template #original-result>
+                <OutputDisplay
+                    :content="conversationTester.testResults.originalResult"
+                    :reasoning="conversationTester.testResults.originalReasoning"
+                    :streaming="conversationTester.testResults.isTestingOriginal"
+                    :enableDiff="false"
+                    mode="readonly"
+                    :style="{ height: '100%', minHeight: '0' }"
+                />
+            </template>
 
-            <!-- 测试区域主内容 -->
-            <NCard
-                :style="{ flex: 1, overflow: 'auto' }"
-                content-style="height: 100%; max-height: 100%; overflow: hidden;"
-            >
-                <ConversationTestPanel
-                    ref="testAreaPanelRef"
-                    :optimization-mode="optimizationMode"
-                    :is-test-running="conversationTester.testResults.isTestingOriginal || conversationTester.testResults.isTestingOptimized"
-                    :is-compare-mode="isCompareMode"
-                    :enable-compare-mode="true"
-                    @update:isCompareMode="emit('update:isCompareMode', $event)"
-                    @compare-toggle="emit('compare-toggle')"
-                    :global-variables="globalVariables"
-                    :predefined-variables="predefinedVariables"
-                    :temporary-variables="tempVars.temporaryVariables.value"
-                    :input-mode="inputMode"
-                    :control-bar-layout="controlBarLayout"
-                    :button-size="buttonSize"
-                    :result-vertical-layout="resultVerticalLayout"
-                    @test="handleTestWithVariables"
-                    @open-variable-manager="emit('open-variable-manager')"
-                    @variable-change="handleVariableChange"
-                    @save-to-global="
-                        (name: string, value: string) => emit('save-to-global', name, value)
-                    "
-                    @temporary-variable-remove="handleVariableRemove"
-                    @temporary-variables-clear="handleVariablesClear"
-                >
-                    <!-- 模型选择插槽 -->
-                    <template #model-select>
-                        <slot name="test-model-select"></slot>
-                    </template>
+            <template #optimized-result>
+                <OutputDisplay
+                    :content="conversationTester.testResults.optimizedResult"
+                    :reasoning="conversationTester.testResults.optimizedReasoning"
+                    :streaming="conversationTester.testResults.isTestingOptimized"
+                    :enableDiff="false"
+                    mode="readonly"
+                    :style="{ height: '100%', minHeight: '0' }"
+                />
+            </template>
 
-                    <!-- 🆕 对比模式结果插槽：直接绑定测试结果 -->
-                    <template #original-result>
-                        <OutputDisplay
-                            :content="conversationTester.testResults.originalResult"
-                            :reasoning="conversationTester.testResults.originalReasoning"
-                            :streaming="conversationTester.testResults.isTestingOriginal"
-                            :enableDiff="false"
-                            mode="readonly"
-                            :style="{ height: '100%', minHeight: '0' }"
-                        />
-                    </template>
+            <!-- 单一结果插槽 -->
+            <template #single-result>
+                <OutputDisplay
+                    :content="conversationTester.testResults.optimizedResult"
+                    :reasoning="conversationTester.testResults.optimizedReasoning"
+                    :streaming="conversationTester.testResults.isTestingOptimized"
+                    :enableDiff="false"
+                    mode="readonly"
+                    :style="{ height: '100%', minHeight: '0' }"
+                />
+            </template>
+        </ConversationTestPanel>
 
-                    <template #optimized-result>
-                        <OutputDisplay
-                            :content="conversationTester.testResults.optimizedResult"
-                            :reasoning="conversationTester.testResults.optimizedReasoning"
-                            :streaming="conversationTester.testResults.isTestingOptimized"
-                            :enableDiff="false"
-                            mode="readonly"
-                            :style="{ height: '100%', minHeight: '0' }"
-                        />
-                    </template>
-
-                    <!-- 单一结果插槽 -->
-                    <template #single-result>
-                        <OutputDisplay
-                            :content="conversationTester.testResults.optimizedResult"
-                            :reasoning="conversationTester.testResults.optimizedReasoning"
-                            :streaming="conversationTester.testResults.isTestingOptimized"
-                            :enableDiff="false"
-                            mode="readonly"
-                            :style="{ height: '100%', minHeight: '0' }"
-                        />
-                    </template>
-                </ConversationTestPanel>
-            </NCard>
-        </NFlex>
+        <!-- 评估详情面板 -->
+        <EvaluationPanel
+            v-bind="evaluationHandler.panelProps.value"
+            @close="evaluationHandler.evaluation.closePanel"
+            @re-evaluate="evaluationHandler.handleReEvaluate"
+            @apply-improvement="handleApplyImprovement"
+        />
     </NFlex>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, inject, provide } from 'vue'
+import { ref, computed, inject, provide, type Ref } from 'vue'
 
 import { useI18n } from "vue-i18n";
 import { NCard, NFlex, NButton, NText, NEmpty } from "naive-ui";
-import { useBreakpoints } from "@vueuse/core";
 import PromptPanelUI from "../PromptPanel.vue";
 import ConversationTestPanel from "./ConversationTestPanel.vue";
 import ConversationManager from "./ConversationManager.vue";
 import OutputDisplay from "../OutputDisplay.vue";
+import { EvaluationPanel } from "../evaluation";
 import { useConversationTester } from '../../composables/prompt/useConversationTester'
 import { useConversationOptimization } from '../../composables/prompt/useConversationOptimization'
 import { usePromptDisplayAdapter } from '../../composables/prompt/usePromptDisplayAdapter'
 import { useTemporaryVariables } from '../../composables/variable/useTemporaryVariables'
+import { useEvaluationHandler } from '../../composables/prompt/useEvaluationHandler'
 import type { OptimizationMode, ConversationMessage } from "../../types";
 import type {
     PromptRecord,
     PromptRecordChain,
     Template,
     ToolDefinition,
+    ProSystemEvaluationContext,
 } from "@prompt-optimizer/core";
 import type { TestAreaPanelInstance } from "../types/test-area";
 import type { IteratePayload, SaveFavoritePayload } from "../../types/workspace";
 import type { VariableManagerHooks } from '../../composables/prompt/useVariableManager'
 import type { AppServices } from '../../types/services'
 
-// 响应式断点
-const breakpoints = useBreakpoints({
-    mobile: 640,
-    tablet: 1024,
-});
-const isMobile = breakpoints.smaller("mobile");
-
-// Props 定义
 interface Props {
     // 核心状态
     optimizedReasoning?: string;
@@ -306,7 +279,6 @@ interface Props {
 
     // 响应式布局配置
     inputMode?: "compact" | "normal";
-    controlBarLayout?: "default" | "compact" | "minimal";
     buttonSize?: "small" | "medium" | "large";
     conversationMaxHeight?: number;
     resultVerticalLayout?: boolean;
@@ -316,6 +288,8 @@ interface Props {
 
     // 🆕 测试相关（避免通过 App.vue 中转）
     selectedTestModel?: string;
+    /** 测试模型名称（用于显示标签） */
+    testModelName?: string;
 }
 
 interface ConversationSnapshotEntry extends ConversationMessage {
@@ -333,7 +307,6 @@ interface ContextSystemHistoryPayload {
 const props = withDefaults(defineProps<Props>(), {
     optimizedReasoning: "",
     inputMode: "normal",
-    controlBarLayout: "default",
     buttonSize: "medium",
     conversationMaxHeight: 300,
     resultVerticalLayout: false,
@@ -424,6 +397,44 @@ const conversationTester = useConversationTester(
     selectedMessageId
 )
 
+// 🆕 构建 Pro-System 评估上下文
+const proContext = computed<ProSystemEvaluationContext | undefined>(() => {
+    const selectedMsg = conversationOptimization.selectedMessage.value
+    if (!selectedMsg) return undefined
+
+    return {
+        targetMessage: {
+            role: selectedMsg.role as 'system' | 'user' | 'assistant' | 'tool',
+            content: conversationOptimization.optimizedPrompt.value || selectedMsg.content,
+            originalContent: selectedMsg.content,
+        },
+        conversationMessages: props.optimizationContext.map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+            isTarget: msg.id === selectedMsg.id,
+        })),
+    }
+})
+
+// 🆕 测试结果数据
+const testResultsData = computed(() => ({
+    originalResult: conversationTester.testResults.originalResult || undefined,
+    optimizedResult: conversationTester.testResults.optimizedResult || undefined,
+}))
+
+// 🆕 初始化评估处理器
+const evaluationHandler = useEvaluationHandler({
+    services: services || ref(null),
+    originalPrompt: computed(() => conversationOptimization.selectedMessage.value?.content || ''),
+    optimizedPrompt: computed(() => conversationOptimization.optimizedPrompt.value),
+    testContent: computed(() => ''), // Pro-System 模式无测试内容输入
+    testResults: testResultsData,
+    evaluationModelKey: computed(() => props.selectedOptimizeModel),
+    functionMode: computed(() => 'pro'),
+    subMode: computed(() => 'system'),
+    proContext,
+})
+
 // 处理迭代优化事件
 // 注意：由于 displayedOptimizedPrompt 在未选中消息时为空，迭代按钮不会显示，所以此函数调用时必定处于消息优化模式
 const handleIterate = (payload: IteratePayload) => {
@@ -438,6 +449,9 @@ const handleOptimizeClick = () => {
 
 // 🆕 ConversationTestPanel 引用
 const testAreaPanelRef = ref<TestAreaPanelInstance | null>(null);
+
+/** PromptPanel 组件引用,用于打开迭代弹窗 */
+const promptPanelRef = ref<InstanceType<typeof PromptPanelUI> | null>(null);
 
 const restoreFromHistory = async ({
     chain,
@@ -545,6 +559,9 @@ const handleVariablesClear = () => {
 
 // 🆕 处理测试事件
 const handleTestWithVariables = async () => {
+    // 重新测试时清理之前的评估结果
+    evaluationHandler.clearBeforeTest();
+
     const testVariables = testAreaPanelRef.value?.getVariableValues?.() || {};
     await conversationTester.executeTest(
         props.isCompareMode || false,
@@ -552,6 +569,9 @@ const handleTestWithVariables = async () => {
         testAreaPanelRef.value
     );
 };
+
+// 🆕 处理应用改进建议事件（使用 evaluationHandler 提供的工厂方法）
+const handleApplyImprovement = evaluationHandler.createApplyImprovementHandler(promptPanelRef);
 
 // 暴露引用
 defineExpose({

@@ -1,7 +1,7 @@
 <template>
-    <NFlex vertical :style="{ height: '100%' }">
+    <NFlex vertical :style="{ height: '100%', gap: '12px' }">
         <!-- 测试输入区域 (仅在系统提示词优化模式下显示) -->
-        <div v-if="showTestInput" :style="{ flexShrink: 0 }">
+        <NCard v-if="showTestInput" :style="{ flexShrink: 0 }" size="small">
             <TestInputSection
                 v-model="testContentProxy"
                 :label="t('test.content')"
@@ -11,26 +11,22 @@
                 :mode="adaptiveInputMode"
                 :size="inputSize"
                 :enable-fullscreen="enableFullscreen"
-                :style="{ marginBottom: '16px' }"
             />
-        </div>
-
-
+        </NCard>
 
         <!-- 控制工具栏 -->
-        <div :style="{ flexShrink: 0 }">
+        <NCard :style="{ flexShrink: 0 }" size="small">
             <TestControlBar
                 :model-label="t('test.model')"
+                :model-name="props.modelName"
                 :show-compare-toggle="enableCompareMode"
                 :is-compare-mode="props.isCompareMode"
                 :primary-action-text="primaryActionText"
                 :primary-action-disabled="primaryActionDisabled"
                 :primary-action-loading="isTestRunning"
-                :layout="adaptiveControlBarLayout"
                 :button-size="adaptiveButtonSize"
                 @compare-toggle="handleCompareToggle"
                 @primary-action="handleTest"
-                :style="{ marginBottom: '16px' }"
             >
                 <template #model-select>
                     <slot name="model-select"></slot>
@@ -42,7 +38,7 @@
                     <slot name="custom-actions"></slot>
                 </template>
             </TestControlBar>
-        </div>
+        </NCard>
 
         <!-- 测试结果区域 -->
         <TestResultSection
@@ -57,6 +53,24 @@
             :single-result="singleResult"
             :size="adaptiveButtonSize"
             :style="{ flex: 1, minHeight: 0 }"
+            :show-evaluation="showEvaluation"
+            :has-original-result="hasOriginalResult"
+            :has-optimized-result="hasOptimizedResult"
+            :is-evaluating-original="isEvaluatingOriginal"
+            :is-evaluating-optimized="isEvaluatingOptimized"
+            :original-score="originalScore"
+            :optimized-score="optimizedScore"
+            :has-original-evaluation="hasOriginalEvaluation"
+            :has-optimized-evaluation="hasOptimizedEvaluation"
+            :original-evaluation-result="originalEvaluationResult"
+            :optimized-evaluation-result="optimizedEvaluationResult"
+            :original-score-level="originalScoreLevel"
+            :optimized-score-level="optimizedScoreLevel"
+            @evaluate-original="handleEvaluateOriginal"
+            @evaluate-optimized="handleEvaluateOptimized"
+            @show-original-detail="handleShowOriginalDetail"
+            @show-optimized-detail="handleShowOptimizedDetail"
+            @apply-improvement="handleApplyImprovement"
         >
             <template #original-result>
                 <div class="result-container">
@@ -119,12 +133,16 @@ import { computed, ref, onUnmounted } from 'vue'
 import { useI18n } from "vue-i18n";
 import {
     NFlex,
+    NCard,
 } from "naive-ui";
 import type {
     OptimizationMode,
     AdvancedTestResult,
     ToolCallResult,
+    EvaluationResponse,
+    EvaluationType,
 } from "@prompt-optimizer/core";
+import type { ScoreLevel } from './evaluation/EvaluationScoreBadge.vue';
 import { useResponsive } from '../composables/ui/useResponsive';
 import { usePerformanceMonitor } from "../composables/performance/usePerformanceMonitor";
 import { useDebounceThrottle } from "../composables/performance/useDebounceThrottle";
@@ -165,7 +183,8 @@ interface Props {
     optimizedPrompt?: string; // 优化后的提示词（用于变量检测）
     isCompareMode?: boolean;
 
-
+    // 模型信息（用于显示标签）
+    modelName?: string;
 
     // 功能开关
     enableCompareMode?: boolean;
@@ -173,7 +192,6 @@ interface Props {
 
     // 布局配置
     inputMode?: "compact" | "normal";
-    controlBarLayout?: "default" | "compact" | "minimal";
     buttonSize?: "small" | "medium" | "large";
 
     // 结果显示配置
@@ -187,6 +205,22 @@ interface Props {
     originalResult?: AdvancedTestResult;
     optimizedResult?: AdvancedTestResult;
     singleResult?: AdvancedTestResult;
+
+    // 评估功能配置
+    showEvaluation?: boolean;
+    hasOriginalResult?: boolean;
+    hasOptimizedResult?: boolean;
+    isEvaluatingOriginal?: boolean;
+    isEvaluatingOptimized?: boolean;
+    originalScore?: number | null;
+    optimizedScore?: number | null;
+    hasOriginalEvaluation?: boolean;
+    hasOptimizedEvaluation?: boolean;
+    // 新增：评估结果和等级，用于悬浮预览
+    originalEvaluationResult?: EvaluationResponse | null;
+    optimizedEvaluationResult?: EvaluationResponse | null;
+    originalScoreLevel?: ScoreLevel | null;
+    optimizedScoreLevel?: ScoreLevel | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -196,14 +230,26 @@ const props = withDefaults(defineProps<Props>(), {
     enableCompareMode: true,
     enableFullscreen: true,
     inputMode: "normal",
-    controlBarLayout: "default",
     buttonSize: "medium",
     showOriginalResult: true,
     resultVerticalLayout: false,
     originalResultTitle: "",
     optimizedResultTitle: "",
     singleResultTitle: "",
-
+    // 评估默认值
+    showEvaluation: false,
+    hasOriginalResult: false,
+    hasOptimizedResult: false,
+    isEvaluatingOriginal: false,
+    isEvaluatingOptimized: false,
+    originalScore: null,
+    optimizedScore: null,
+    hasOriginalEvaluation: false,
+    hasOptimizedEvaluation: false,
+    originalEvaluationResult: null,
+    optimizedEvaluationResult: null,
+    originalScoreLevel: null,
+    optimizedScoreLevel: null,
 });
 
 const emit = defineEmits<{
@@ -224,7 +270,12 @@ const emit = defineEmits<{
         toolCalls: ToolCallResult[],
         testType: "original" | "optimized",
     ];
-
+    // 评估事件
+    "evaluate-original": [];
+    "evaluate-optimized": [];
+    "show-original-detail": [];
+    "show-optimized-detail": [];
+    "apply-improvement": [payload: { improvement: string; type: EvaluationType }];
 }>();
 
 // 内部状态管理 - 去除防抖，保证输入即时响应
@@ -288,12 +339,6 @@ const adaptiveInputMode = computed(() => {
     return props.inputMode || "normal";
 });
 
-const adaptiveControlBarLayout = computed(() => {
-    if (shouldUseCompactMode.value) return "minimal";
-    if (shouldUseVerticalLayout.value) return "compact";
-    return props.controlBarLayout || "default";
-});
-
 const adaptiveButtonSize = computed(() => {
     return buttonSize.value;
 });
@@ -340,6 +385,28 @@ const handleTest = throttle(
     200,
     "handleTest",
 );
+
+// ========== 评估事件处理 ==========
+const handleEvaluateOriginal = () => {
+    emit("evaluate-original");
+};
+
+const handleEvaluateOptimized = () => {
+    emit("evaluate-optimized");
+};
+
+const handleShowOriginalDetail = () => {
+    emit("show-original-detail");
+};
+
+const handleShowOptimizedDetail = () => {
+    emit("show-optimized-detail");
+};
+
+// 应用改进建议处理
+const handleApplyImprovement = (payload: { improvement: string; type: EvaluationType }) => {
+    emit("apply-improvement", payload);
+};
 
 // ========== 变量管理 ==========
 

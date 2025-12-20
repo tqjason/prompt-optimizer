@@ -4,8 +4,16 @@
 
 // 统一的消息结构
 export interface ConversationMessage {
+  /**
+   * 可选消息 ID（上下文/会话模式用于精确定位与历史恢复）
+   */
+  id?: string
   role: 'system' | 'user' | 'assistant' | 'tool'
   content: string  // 可包含变量语法 {{variableName}}
+  /**
+   * 可选原始内容（用于对比/历史恢复）
+   */
+  originalContent?: string
   name?: string
   tool_calls?: {
     id: string
@@ -100,7 +108,8 @@ export type PredefinedVariable = typeof PREDEFINED_VARIABLES[number];
 
 // 变量验证规则
 export const VARIABLE_VALIDATION = {
-  NAME_PATTERN: /^[a-zA-Z][a-zA-Z0-9_]*$/,
+  // 变量名规则：不能为空，不能包含空白字符和花括号
+  NAME_PATTERN: /^[^\s{}]+$/,
   MAX_NAME_LENGTH: 50,
   MAX_VALUE_LENGTH: 10000,
   VARIABLE_SCAN_PATTERN: /\{\{([^}]+)\}\}/g

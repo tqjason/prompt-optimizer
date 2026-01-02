@@ -87,7 +87,10 @@
                     :loading="isOptimizing"
                     :disabled="isOptimizing"
                     :show-preview="false"
+                    :show-analyze-button="true"
+                    :analyze-loading="analyzing"
                     @submit="emit('optimize')"
+                    @analyze="handleAnalyze"
                     @configModel="emit('config-model')"
                     @open-preview="emit('open-input-preview')"
                 >
@@ -132,6 +135,7 @@
                 }"
                 content-style="height: 100%; max-height: 100%; overflow: hidden;"
             >
+                <!-- PromptPanel 现在通过 inject 获取评估上下文，无需传递评估相关 props -->
                 <PromptPanelUI
                     ref="promptPanelRef"
                     :optimized-prompt="optimizedPrompt"
@@ -141,7 +145,7 @@
                     :is-optimizing="isOptimizing"
                     :is-iterating="isIterating"
                     :selected-iterate-template="selectedIterateTemplate"
-                    @update:selected-iterate-template="emit('update:selectedIterateTemplate', $event)"
+                    @update:selectedIterateTemplate="emit('update:selectedIterateTemplate', $event)"
                     :versions="currentVersions"
                     :current-version-id="currentVersionId"
                     :optimization-mode="optimizationMode"
@@ -152,6 +156,9 @@
                     @switchVersion="handleSwitchVersion"
                     @save-favorite="emit('save-favorite', $event)"
                     @open-preview="emit('open-prompt-preview')"
+                    @apply-improvement="emit('apply-improvement', $event)"
+                    @apply-patch="emit('apply-patch', $event)"
+                    @save-local-edit="emit('save-local-edit', $event)"
                 />
             </NCard>
         </NFlex>
@@ -175,7 +182,7 @@
             :test-content="testContent"
             @update:test-content="emit('update:testContent', $event)"
             :is-compare-mode="isCompareMode"
-            @update:is-compare-mode="emit('update:isCompareMode', $event)"
+            @update:isCompareMode="emit('update:isCompareMode', $event)"
             :enable-compare-mode="true"
             :enable-fullscreen="true"
             :input-mode="inputMode"
@@ -205,6 +212,7 @@
             @show-original-detail="emit('show-original-detail')"
             @show-optimized-detail="emit('show-optimized-detail')"
             @apply-improvement="emit('apply-improvement', $event)"
+            @apply-patch="emit('apply-patch', $event)"
         >
             <!-- 模型选择插槽 -->
             <template #model-select>
@@ -270,6 +278,7 @@
                         size="small"
                         @show-detail="emit('show-compare-detail')"
                         @apply-improvement="emit('apply-improvement', $event)"
+                        @apply-patch="emit('apply-patch', $event)"
                     />
                     <!-- 未评估：显示评估按钮 -->
                     <NButton
@@ -318,7 +327,7 @@
  * </BasicModeWorkspace>
  * ```
  */
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NCard, NFlex, NButton, NText, NIcon } from 'naive-ui'
 import InputPanelUI from '../InputPanel.vue'
@@ -327,7 +336,7 @@ import TestAreaPanel from '../TestAreaPanel.vue'
 import OutputDisplay from '../OutputDisplay.vue'
 import { EvaluationScoreBadge } from '../evaluation'
 import type { OptimizationMode } from '../../types'
-import type { PromptRecord, Template, EvaluationResult, ScoreLevel } from '@prompt-optimizer/core'
+import type { PromptRecord, Template, EvaluationResult, ScoreLevel, PatchOperation } from '@prompt-optimizer/core'
 import type { PromptPanelInstance } from '../types/prompt-panel'
 import type { TestAreaPanelInstance } from '../types/test-area'
 import type { SaveFavoritePayload, IteratePayload } from '../../types/workspace'
@@ -426,6 +435,8 @@ interface Props {
     /** 对比分数等级 */
     compareScoreLevel?: ScoreLevel
 
+    // 注：仅提示词评估状态（prompt-only/prompt-iterate）现在通过 provide/inject 机制在 PromptPanel 内部获取
+
     // === 响应式布局配置 ===
     /** 输入模式 */
     inputMode?: 'compact' | 'normal'
@@ -437,6 +448,9 @@ interface Props {
     conversationMaxHeight?: number
     /** 结果区域是否垂直布局 */
     resultVerticalLayout?: boolean
+
+    /** 🆕 是否正在分析（由 App 层驱动） */
+    analyzing?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -467,6 +481,7 @@ const props = withDefaults(defineProps<Props>(), {
     buttonSize: 'medium',
     conversationMaxHeight: 300,
     resultVerticalLayout: false,
+    analyzing: false,
 })
 
 // ========================
@@ -503,6 +518,8 @@ const emit = defineEmits<{
     'evaluate-optimized': []
     /** 评估对比 */
     'evaluate-compare': []
+    /** 评估仅提示词（分析模式） */
+    'evaluate-prompt-only': []
     /** 显示原始详情 */
     'show-original-detail': []
     /** 显示优化详情 */
@@ -511,10 +528,16 @@ const emit = defineEmits<{
     'show-compare-detail': []
     /** 应用改进 */
     'apply-improvement': [payload: { improvement: string; type: string }]
+    /** 应用补丁 */
+    'apply-patch': [payload: { operation: PatchOperation }]
+    // 注：PromptPanel 内的提示词评估（prompt-only/prompt-iterate）通过 inject 的 evaluation context 处理；
+    // 这里的 evaluate-prompt-only 仅用于“分析模式”触发 App 层的 prompt-only 评估。
 
     // === 保存/管理事件 ===
     /** 保存收藏 */
     'save-favorite': [data: SaveFavoritePayload]
+    /** 保存本地修改为新版本 */
+    'save-local-edit': [payload: { note?: string }]
 
     // === 打开面板/管理器 ===
     /** 打开变量管理器 */
@@ -541,6 +564,9 @@ const testAreaPanelRef = ref<TestAreaPanelInstance | null>(null)
 // 输入区折叠状态（初始展开）
 const isInputPanelCollapsed = ref(false)
 
+/** 是否正在执行分析 */
+const analyzing = computed(() => !!props.analyzing)
+
 // 提示词摘要（折叠态显示）
 const promptSummary = computed(() => {
     if (!props.prompt) return ''
@@ -552,6 +578,26 @@ const promptSummary = computed(() => {
 // ========================
 // 事件处理
 // ========================
+
+/**
+ * 处理分析操作
+ * - 清空版本链，创建 V0（与优化同级）
+ * - 不写入历史（分析不产生新提示词）
+ * - 触发 prompt-only 评估
+ */
+const handleAnalyze = async () => {
+    if (!props.prompt?.trim()) return
+    if (props.isOptimizing) return
+    if (analyzing.value) return
+
+    // 1. 收起输入区域
+    isInputPanelCollapsed.value = true
+
+    await nextTick()
+
+    // 2. 触发 App 层的分析（会清空版本链、创建 V0、触发评估）
+    emit('evaluate-prompt-only')
+}
 
 /** 处理迭代 */
 const handleIterate = (payload: IteratePayload) => {

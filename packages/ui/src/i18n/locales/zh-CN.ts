@@ -171,7 +171,7 @@ export default {
       add: "添加",
       emptySearchResult: "没有找到匹配的收藏",
       emptyDescription: "还没有收藏任何提示词",
-      startOptimize: "开始优化提示词",
+      startOptimize: "优化",
       importDialog: {
         title: "导入收藏",
         selectFile: "选择 JSON 文件",
@@ -415,7 +415,9 @@ export default {
   promptOptimizer: {
     title: "提示词优化器",
     inputPlaceholder: "请输入需要优化的prompt...",
-    optimize: "开始优化",
+    optimize: "优化",
+    analyze: "分析",
+    analyzing: "分析中...",
     history: "历史记录",
     save: "保存提示词",
     share: "分享",
@@ -1005,8 +1007,8 @@ export default {
       help: "",
     },
     model: "测试模型",
-    startTest: "开始测试",
-    startCompare: "开始对比",
+    startTest: "测试",
+    startCompare: "测试",
     testing: "测试中...",
     toggleCompare: {
       enable: "开启对比",
@@ -1018,7 +1020,7 @@ export default {
     testResult: "测试结果",
     userPromptTest: "用户提示词测试",
     advanced: {
-      startTest: "开始测试",
+      startTest: "测试",
       result: "测试结果",
       messageCount: "{count} 条消息",
       missingVariables: "缺少 {count} 个变量",
@@ -1128,9 +1130,12 @@ export default {
     },
   },
   prompt: {
-    optimized: "优化后的提示词",
+    optimized: "优化工作区",
     optimizing: "优化中...",
     continueOptimize: "继续优化",
+    analyze: "分析",
+    originalVersion: "原始",
+    originalVersionTooltip: "未经优化的原始输入，编辑保存后将创建新版本",
     applyToConversation: "应用到会话",
     copy: "复制",
     applyToTest: "应用到测试",
@@ -1139,6 +1144,9 @@ export default {
     iterateDirection: "请输入需要优化的方向：",
     iteratePlaceholder: "例如：使提示词更简洁、增加特定功能描述等...",
     confirmOptimize: "确认优化",
+    saveChanges: "保存修改",
+    saveChangesNote: "本地编辑保存",
+    unsavedChangesConfirm: "当前内容有未保存的更改，切换版本将丢失。是否继续？",
     iterateTitle: "迭代功能提示词",
     selectIterateTemplate: "请选择迭代提示词：",
     diff: {
@@ -1149,6 +1157,7 @@ export default {
     },
     error: {
       noTemplate: "请先选择迭代提示词",
+      noOptimizedPrompt: "请先优化提示词",
     },
   },
   output: {
@@ -1234,6 +1243,7 @@ export default {
       conversationRestored: "已从历史记录恢复完整会话",
       imageFavoriteLoaded: "收藏的图像提示词已加载",
       favoriteLoaded: "已将提示词加载到输入框",
+      localEditSaved: "已保存为新版本",
     },
     warn: {
       loadOptimizeTemplateFailed: "加载已保存的优化提示词失败",
@@ -1242,6 +1252,7 @@ export default {
     warning: {
       cannotOptimizeRole: "无法优化 {role} 角色的消息",
       saveHistoryFailed: "保存历史记录失败",
+      patchApplyFailed: "未能自动应用修复，请手动编辑",
       messageNotFound: "未找到消息",
       noVersionSelected: "请先选择要应用的版本",
       noContentToApply: "没有可应用的内容",
@@ -1998,7 +2009,7 @@ export default {
     dimensions: "维度评分",
     issues: "问题",
     improvements: "改进建议",
-    applyToIterate: "应用",
+    applyToIterate: "迭代优化",
     applySuccess: "正在应用改进建议...",
     noResult: "暂无评估结果，点击评估按钮开始评估",
     viewDetails: "查看详情",
@@ -2007,6 +2018,8 @@ export default {
       original: "原始提示词评估",
       optimized: "优化后评估",
       compare: "对比评估",
+      promptOnly: "提示词质量分析",
+      promptIterate: "迭代优化分析",
     },
     type: {
       original: "评估原始提示词",
@@ -2033,6 +2046,47 @@ export default {
       serviceNotReady: "评估服务未就绪，请稍后再试",
       failed: "评估失败：{error}",
       noOptimizedPrompt: "没有可优化的提示词",
+    },
+    // 诊断相关翻译
+    diagnose: {
+      title: "诊断分析",
+      confidence: "置信度",
+      findings: "发现问题",
+      patchPlan: "修复计划",
+      noFindings: "未发现问题",
+      noPatchPlan: "无修复计划",
+      applyFix: "应用修复",
+      replaceNow: "立即替换",
+      invariantsWarning: "受限于不可改变项约束",
+      changeBudgetWarning: "受限于变更预算限制",
+      status: {
+        ok: "诊断正常",
+        degraded: "部分降级",
+        failed: "诊断失败",
+      },
+      severity: {
+        critical: "严重",
+        major: "重要",
+        minor: "次要",
+        suggestion: "建议",
+        unknown: "未知",
+      },
+      anchorType: {
+        text: "文本",
+        section: "段落",
+        pattern: "正则",
+      },
+      operation: {
+        insert: "插入",
+        replace: "替换",
+        delete: "删除",
+      },
+      anchorPosition: {
+        before: "之前",
+        after: "之后",
+        replace: "替换",
+      },
+      invariantsRisks: "约束冲突风险",
     },
   },
 };

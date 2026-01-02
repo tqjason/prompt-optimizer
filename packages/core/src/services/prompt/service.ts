@@ -47,20 +47,20 @@ export class PromptService implements IPromptService {
    */
   private checkDependencies() {
     if (!this.modelManager) {
-      throw new ServiceDependencyError("模型管理器未初始化", "ModelManager");
+      throw new ServiceDependencyError("Model manager not initialized", "ModelManager");
     }
     if (!this.llmService) {
-      throw new ServiceDependencyError("LLM服务未初始化", "LLMService");
+      throw new ServiceDependencyError("LLM service not initialized", "LLMService");
     }
     if (!this.templateManager) {
       throw new ServiceDependencyError(
-        "提示词管理器未初始化",
+        "Template manager not initialized",
         "TemplateManager",
       );
     }
     if (!this.historyManager) {
       throw new ServiceDependencyError(
-        "历史记录管理器未初始化",
+        "History manager not initialized",
         "HistoryManager",
       );
     }
@@ -326,14 +326,15 @@ export class PromptService implements IPromptService {
     },
   ): Promise<string> {
     try {
-      this.validateInput(originalPrompt, modelKey);
+      // 🔧 迭代模板只需要 lastOptimizedPrompt 和 iterateInput
+      // originalPrompt 可以为空（用户直接在工作区编辑后迭代的场景）
       this.validateInput(lastOptimizedPrompt, modelKey);
       this.validateInput(iterateInput, modelKey);
 
       // 获取模型配置
       const modelConfig = await this.modelManager.getModel(modelKey);
       if (!modelConfig) {
-        throw new ServiceDependencyError("模型不存在", "ModelManager");
+        throw new ServiceDependencyError("Model not found", "ModelManager");
       }
 
       // 获取迭代提示词
@@ -346,7 +347,7 @@ export class PromptService implements IPromptService {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
         throw new IterationError(
-          `迭代失败: ${errorMessage}`,
+          `Iteration failed: ${errorMessage}`,
           originalPrompt,
           iterateInput,
         );
@@ -355,6 +356,18 @@ export class PromptService implements IPromptService {
       if (!template?.content) {
         throw new IterationError(
           "Iteration failed: Template not found or invalid",
+          originalPrompt,
+          iterateInput,
+        );
+      }
+
+      // 🔧 迭代功能必须使用高级模板（message array 格式）以支持变量替换
+      if (typeof template.content === "string") {
+        throw new IterationError(
+          `Iteration requires advanced template (message array format) for variable substitution.\n` +
+            `Template ID: ${template.id}\n` +
+            `Current template type: Simple template (string format)\n` +
+            `Suggestion: Please use message array format template that supports {{lastOptimizedPrompt}} and {{iterateInput}} variables`,
           originalPrompt,
           iterateInput,
         );
@@ -398,7 +411,7 @@ export class PromptService implements IPromptService {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       throw new IterationError(
-        `迭代失败: ${errorMessage}`,
+        `Iteration failed: ${errorMessage}`,
         originalPrompt,
         iterateInput,
       );
@@ -760,7 +773,8 @@ export class PromptService implements IPromptService {
     },
   ): Promise<void> {
     try {
-      this.validateInput(originalPrompt, modelKey);
+      // 🔧 迭代模板只需要 lastOptimizedPrompt 和 iterateInput
+      // originalPrompt 可以为空（用户直接在工作区编辑后迭代的场景）
       this.validateInput(lastOptimizedPrompt, modelKey);
       this.validateInput(iterateInput, modelKey);
 
@@ -787,6 +801,18 @@ export class PromptService implements IPromptService {
       if (!template?.content) {
         throw new IterationError(
           "Iteration failed: Template not found or invalid",
+          originalPrompt,
+          iterateInput,
+        );
+      }
+
+      // 🔧 迭代功能必须使用高级模板（message array 格式）以支持变量替换
+      if (typeof template.content === "string") {
+        throw new IterationError(
+          `Iteration requires advanced template (message array format) for variable substitution.\n` +
+            `Template ID: ${template.id}\n` +
+            `Current template type: Simple template (string format)\n` +
+            `Suggestion: Please use message array format template that supports {{lastOptimizedPrompt}} and {{iterateInput}} variables`,
           originalPrompt,
           iterateInput,
         );

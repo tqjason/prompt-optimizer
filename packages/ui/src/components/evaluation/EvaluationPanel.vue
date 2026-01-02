@@ -14,7 +14,7 @@
           <!-- 流式内容预览 -->
           <div v-if="streamContent" class="stream-preview">
             <NText depth="3" class="stream-label">{{ t('evaluation.analyzing') }}</NText>
-            <NScrollbar style="max-height: 200px;">
+            <NScrollbar ref="streamScrollbarRef" style="max-height: 200px;">
               <NText class="stream-content">{{ streamContent }}</NText>
             </NScrollbar>
           </div>
@@ -48,12 +48,6 @@
               </NText>
             </div>
 
-            <!-- 对比评估结果判定 -->
-            <NAlert
-              v-if="result.type === 'compare' && result.isOptimizedBetter !== undefined"
-              :type="result.isOptimizedBetter ? 'success' : 'warning'"
-              :title="result.isOptimizedBetter ? t('evaluation.optimizedBetter') : t('evaluation.originalBetter')"
-            />
 
             <!-- 一句话总结 -->
             <NCard v-if="result.summary" size="small">
@@ -78,11 +72,28 @@
               </NSpace>
             </NCard>
 
-            <!-- 问题清单 -->
-            <NCard v-if="result.issues && result.issues.length > 0" :title="t('evaluation.issues')" size="small">
+            <!-- 精准修复（patchPlan） -->
+            <NCard
+              v-if="result.patchPlan && result.patchPlan.length > 0"
+              :title="t('evaluation.diagnose.title')"
+              size="small"
+            >
               <NList>
-                <NListItem v-for="(issue, index) in result.issues" :key="index">
-                  <NText type="error">{{ issue }}</NText>
+                <NListItem v-for="(op, opIndex) in result.patchPlan" :key="opIndex">
+                  <div class="patch-item">
+                    <div class="patch-header">
+                      <NTag :type="getOperationType(op.op)" size="tiny">
+                        {{ getOperationLabel(op.op) }}
+                      </NTag>
+                      <NText class="patch-instruction">{{ op.instruction }}</NText>
+                    </div>
+                    <div class="patch-diff-inline">
+                      <InlineDiff :old-text="op.oldText" :new-text="op.newText" />
+                    </div>
+                    <NButton size="tiny" type="primary" class="patch-apply-btn" @click="handleApplyPatchLocal(op)">
+                      {{ t('evaluation.diagnose.replaceNow') }}
+                    </NButton>
+                  </div>
                 </NListItem>
               </NList>
             </NCard>
@@ -139,7 +150,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   NDrawer,
@@ -149,15 +160,17 @@ import {
   NText,
   NButton,
   NProgress,
-  NAlert,
   NResult,
   NSpin,
   NScrollbar,
   NEmpty,
   NList,
   NListItem,
+  NTag,
+  type ScrollbarInst,
 } from 'naive-ui'
-import type { EvaluationResponse, EvaluationType } from '@prompt-optimizer/core'
+import type { EvaluationResponse, EvaluationType, PatchOperation } from '@prompt-optimizer/core'
+import InlineDiff from './InlineDiff.vue'
 
 // Props
 const props = defineProps<{
@@ -176,10 +189,29 @@ const emit = defineEmits<{
   (e: 'clear'): void
   (e: 'retry'): void
   (e: 're-evaluate'): void
-  (e: 'apply-improvement', payload: { improvement: string; type: EvaluationType }): void
+  (e: 'apply-local-patch', payload: { operation: PatchOperation }): void
+  (e: 'apply-improvement', payload: {
+    improvement: string;
+    type: EvaluationType;
+  }): void
 }>()
 
 const { t } = useI18n()
+
+// 流式内容滚动条引用
+const streamScrollbarRef = ref<ScrollbarInst | null>(null)
+
+// 监听流式内容变化，自动滚动到底部
+watch(() => props.streamContent, () => {
+  nextTick(() => {
+    streamScrollbarRef.value?.scrollTo({ top: 999999, behavior: 'smooth' })
+  })
+})
+
+const tOr = (key: string, fallback: string): string => {
+  const translated = t(key)
+  return translated === key ? fallback : translated
+}
 
 // 面板标题
 const panelTitle = computed(() => {
@@ -190,6 +222,10 @@ const panelTitle = computed(() => {
       return t('evaluation.title.optimized')
     case 'compare':
       return t('evaluation.title.compare')
+    case 'prompt-only':
+      return t('evaluation.title.promptOnly')
+    case 'prompt-iterate':
+      return t('evaluation.title.promptIterate')
     default:
       return t('evaluation.title.default')
   }
@@ -266,6 +302,26 @@ const handleApplyImprovement = (improvement: string) => {
     improvement,
     type: props.currentType || 'optimized'
   })
+}
+
+// ===== patchPlan 相关逻辑 =====
+
+// 获取操作类型样式
+const getOperationType = (op: string): 'success' | 'warning' | 'error' | 'info' => {
+  switch (op) {
+    case 'insert': return 'success'
+    case 'replace': return 'warning'
+    case 'delete': return 'error'
+    default: return 'info'
+  }
+}
+
+const getOperationLabel = (op: string): string => {
+  return tOr(`evaluation.diagnose.operation.${op}`, op)
+}
+
+const handleApplyPatchLocal = (operation: PatchOperation) => {
+  emit('apply-local-patch', { operation })
 }
 </script>
 
@@ -387,5 +443,36 @@ const handleApplyImprovement = (improvement: string) => {
 .improvement-text {
   flex: 1;
   word-break: break-word;
+}
+
+/* patchPlan 相关样式 */
+.patch-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.patch-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.patch-instruction {
+  flex: 1;
+  word-break: break-word;
+  font-size: 13px;
+}
+
+.patch-diff-inline {
+  background: var(--n-color-embedded);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.patch-apply-btn {
+  align-self: flex-end;
 }
 </style>

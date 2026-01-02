@@ -113,13 +113,13 @@
                             @compare-toggle="handleTestAreaCompareToggle"
                             @optimize="handleOptimizePrompt"
                             @iterate="handleIteratePrompt"
-                            @switch-version="handleSwitchVersion"
+                            @switchVersion="handleSwitchVersion"
                             @save-favorite="handleSaveFavorite"
                             @open-global-variables="openVariableManager()"
                             @open-variable-manager="handleOpenVariableManager"
                             @open-context-editor="handleOpenContextEditor()"
                             @open-tool-manager="handleOpenToolManager"
-                            @open-template-manager="openTemplateManager"
+                            @openTemplateManager="openTemplateManager"
                             @config-model="modelManager.showConfig = true"
                             @open-input-preview="handleOpenInputPreview"
                             @open-prompt-preview="handleOpenPromptPreview"
@@ -240,7 +240,7 @@
                             @save-favorite="handleSaveFavorite"
                             @open-global-variables="openVariableManager()"
                             @open-variable-manager="handleOpenVariableManager"
-                            @open-template-manager="openTemplateManager"
+                            @openTemplateManager="openTemplateManager"
                             @config-model="modelManager.showConfig = true"
                             @open-input-preview="handleOpenInputPreview"
                             @open-prompt-preview="handleOpenPromptPreview"
@@ -330,11 +330,11 @@
                             :current-versions="optimizer.currentVersions"
                             :current-version-id="optimizer.currentVersionId"
                             :selected-iterate-template="optimizer.selectedIterateTemplate"
-                            @update:selected-iterate-template="optimizer.selectedIterateTemplate = $event"
+                            @update:selectedIterateTemplate="optimizer.selectedIterateTemplate = $event"
                             :test-content="testContent"
                             @update:test-content="testContent = $event"
                             :is-compare-mode="isCompareMode"
-                            @update:is-compare-mode="isCompareMode = $event"
+                            @update:isCompareMode="isCompareMode = $event"
                             :original-result="testResults.originalResult"
                             :original-reasoning="testResults.originalReasoning"
                             :optimized-result="testResults.optimizedResult"
@@ -367,24 +367,28 @@
                             :button-size="responsiveLayout.smartButtonSize.value"
                             :conversation-max-height="responsiveLayout.responsiveHeights.value.conversationMax"
                             :result-vertical-layout="responsiveLayout.isMobile.value"
+                            :analyzing="isBasicAnalyzing"
                             @optimize="handleOptimizePrompt"
                             @iterate="handleIteratePrompt"
-                            @switch-version="handleSwitchVersion"
+                            @switchVersion="handleSwitchVersion"
                             @test="handleTestAreaTest"
                             @compare-toggle="handleTestAreaCompareToggle"
                             @evaluate-original="() => handleEvaluate('original')"
                             @evaluate-optimized="() => handleEvaluate('optimized')"
                             @evaluate-compare="() => handleEvaluate('compare')"
+                            @evaluate-prompt-only="handleAnalyzeEvaluate"
                             @show-original-detail="() => evaluation.showDetail('original')"
                             @show-optimized-detail="() => evaluation.showDetail('optimized')"
                             @show-compare-detail="() => evaluation.showDetail('compare')"
                             @apply-improvement="handleApplyImprovement"
+                            @apply-patch="handleApplyLocalPatch"
+                            @save-local-edit="handleSaveLocalEdit"
                             @save-favorite="handleSaveFavorite"
                             @open-variable-manager="handleOpenVariableManager"
                             @open-input-preview="handleOpenInputPreview"
                             @open-prompt-preview="handleOpenPromptPreview"
                             @config-model="modelManager.showConfig = true"
-                            @open-template-manager="openTemplateManager"
+                            @openTemplateManager="openTemplateManager"
                         >
                             <!-- 优化模型选择插槽 -->
                             <template #optimize-model-select>
@@ -581,6 +585,7 @@
                 :current-type="evaluation.state.activeDetailType"
                 :score-level="evaluation.activeScoreLevel.value"
                 @re-evaluate="handleReEvaluate"
+                @apply-local-patch="handleApplyLocalPatch"
                 @apply-improvement="handleApplyImprovement"
             />
 
@@ -669,6 +674,7 @@ import {
     useHistoryManager,
     useTemplateManager,
     useEvaluationHandler,
+    provideEvaluation,
     // App 级别
     useAppHistoryRestore,
     useAppFavorite,
@@ -682,7 +688,7 @@ import { DataTransformer, OptionAccessors } from '../../utils/data-transformer'
 
 // Types
 import type { OptimizationMode, ConversationMessage, ModelSelectOption, TemplateSelectOption, TestAreaPanelInstance } from '../../types'
-import type { IPromptService, PromptRecordChain, PromptRecord } from "@prompt-optimizer/core";
+import { applyPatchOperationsToText, type IPromptService, type PromptRecordChain, type PromptRecord, type PatchOperation } from "@prompt-optimizer/core";
 
 // 1. 基础 composables
 const hljsInstance = hljs;
@@ -727,6 +733,9 @@ type ContextUserHistoryPayload = {
 type ContextWorkspaceExpose = {
     testAreaPanelRef?: Ref<TestAreaPanelInstance | null>;
     restoreFromHistory?: (payload: ContextUserHistoryPayload) => void;
+    openIterateDialog?: (input?: string) => void;
+    applyLocalPatch?: (operation: PatchOperation) => void;
+    reEvaluateActive?: () => Promise<void>;
 };
 
 const systemWorkspaceRef = ref<ContextWorkspaceExpose | null>(null);
@@ -763,6 +772,10 @@ const advancedModeEnabled = computed({
 
 // 处理功能模式变化
 const handleModeSelect = async (mode: "basic" | "pro" | "image") => {
+    // 模式切换时：关闭并清理评估状态，避免跨模式残留
+    evaluation.closePanel();
+    evaluation.clearAllResults();
+
     await setFunctionMode(mode);
 
     if (mode === "basic") {
@@ -975,6 +988,15 @@ const currentSubMode = computed(() => {
     return 'system';
 });
 
+// 计算当前版本的迭代需求（用于 prompt-iterate 类型的重新评估）
+const currentIterateRequirement = computed(() => {
+    const versions = optimizer.currentVersions;
+    const versionId = optimizer.currentVersionId;
+    if (!versions || versions.length === 0 || !versionId) return '';
+    const currentVersion = versions.find((v) => v.id === versionId);
+    return currentVersion?.iterationNote || '';
+});
+
 const evaluationHandler = useEvaluationHandler({
     services: services as any,
     originalPrompt: toRef(optimizer, "prompt") as any,
@@ -984,14 +1006,25 @@ const evaluationHandler = useEvaluationHandler({
     evaluationModelKey: computed(() => functionModelManager.effectiveEvaluationModel.value),
     functionMode: functionMode as any,
     subMode: currentSubMode as any,
+    currentIterateRequirement,
 });
 
-const { evaluation, handleEvaluate, handleReEvaluate } = evaluationHandler;
+const { evaluation, handleEvaluate, handleReEvaluate: handleReEvaluateBasic } = evaluationHandler;
+
+// 提供评估上下文给子组件
+provideEvaluation(evaluation);
+
+// 基础模式“分析”专用 loading（避免与普通 prompt-only 评估混用）
+const isBasicAnalyzing = ref(false);
 
 // 同步 contextManagement 中的 contextMode
 watch(
     contextManagement.contextMode,
     async (newMode) => {
+        // Context 子模式切换时：关闭并清理评估状态，避免残留
+        evaluation.closePanel();
+        evaluation.clearAllResults();
+
         contextMode.value = newMode;
 
         if (functionMode.value === "pro") {
@@ -1283,6 +1316,21 @@ const handleDataImported = () => {
 
 // 处理优化提示词
 const handleOptimizePrompt = () => {
+    const shouldClearPromptEvaluation = (() => {
+        const hasPrompt = !!optimizer.prompt?.trim();
+        const hasMessages = optimizationContext.value.length > 0;
+        const hasInput = advancedModeEnabled.value ? (hasPrompt || hasMessages) : hasPrompt;
+        const hasTemplate = !!currentSelectedTemplate.value;
+        const hasModel = !!modelManager.selectedOptimizeModel;
+        return hasInput && hasTemplate && hasModel;
+    })();
+
+    // 只有在确定会发起生成时才清除旧的 prompt-only / prompt-iterate 评估结果
+    if (shouldClearPromptEvaluation) {
+        evaluation.clearResult('prompt-only');
+        evaluation.clearResult('prompt-iterate');
+    }
+
     if (advancedModeEnabled.value) {
         const advancedContext = {
             variables:
@@ -1304,14 +1352,135 @@ const handleOptimizePrompt = () => {
 
 // 处理迭代提示词
 const handleIteratePrompt = (payload: any) => {
+    const shouldClearPromptEvaluation = (() => {
+        const hasOriginal = !!payload?.originalPrompt?.trim?.();
+        const hasOptimized = !!payload?.optimizedPrompt?.trim?.();
+        const hasIterateInput = !!payload?.iterateInput?.trim?.();
+        const hasTemplate = !!optimizer.selectedIterateTemplate;
+        const hasModel = !!modelManager.selectedOptimizeModel;
+        return hasOriginal && hasOptimized && hasIterateInput && hasTemplate && hasModel;
+    })();
+
+    // 只有在确定会发起迭代时才清除旧的 prompt-only / prompt-iterate 评估结果
+    if (shouldClearPromptEvaluation) {
+        evaluation.clearResult('prompt-only');
+        evaluation.clearResult('prompt-iterate');
+    }
+
     optimizer.handleIteratePrompt(payload);
 };
 
+/**
+ * 基础模式"分析"入口：
+ * - 清空版本链，创建 V0（与优化同级）
+ * - 不写入历史（分析不产生新提示词）
+ * - 触发 prompt-only 评估
+ */
+const handleAnalyzeEvaluate = async () => {
+    const prompt = optimizer.prompt || '';
+    if (!prompt.trim()) return;
+
+    // 清空版本链，创建虚拟 V0
+    optimizer.handleAnalyze();
+
+    // 清理旧的提示词评估结果，避免跨提示词残留
+    evaluation.clearResult('prompt-only');
+    evaluation.clearResult('prompt-iterate');
+
+    isBasicAnalyzing.value = true;
+    try {
+        await handleEvaluate('prompt-only');
+    } finally {
+        isBasicAnalyzing.value = false;
+    }
+};
+
+const handleSaveLocalEdit = async (payload: { note?: string }) => {
+    await optimizer.saveLocalEdit({
+        optimizedPrompt: optimizer.optimizedPrompt || '',
+        note: payload.note,
+        source: 'manual',
+    });
+    toast.success(t('toast.success.localEditSaved'));
+};
+
+// 注：handleEvaluatePromptOnly 已移除，PromptPanel 现在直接通过 inject 的 evaluation context 调用评估方法
+
 // 处理应用评估改进建议
-const handleApplyImprovement = evaluationHandler.createApplyImprovementHandler(basicModeWorkspaceRef);
+const _basicApplyImprovement = evaluationHandler.createApplyImprovementHandler(basicModeWorkspaceRef);
+const getActiveContextWorkspace = (): ContextWorkspaceExpose | null => {
+    if (contextMode.value === 'system') return systemWorkspaceRef.value;
+    if (contextMode.value === 'user') return userWorkspaceRef.value;
+    return null;
+};
+
+const handleApplyImprovement = (payload: { improvement: string; type: any }) => {
+    // 关闭评估面板
+    evaluation.closePanel();
+
+    if (functionMode.value === 'pro') {
+        const workspace = getActiveContextWorkspace();
+        if (!workspace?.openIterateDialog) {
+            // 这里按产品约定属于异常：Context 模式必须可以应用改进建议
+            console.error('[PromptOptimizerApp] Context apply-improvement handler missing openIterateDialog');
+            toast.error(t('toast.error.optimizeProcessFailed'));
+            return;
+        }
+        workspace.openIterateDialog(payload.improvement);
+        return;
+    }
+
+    _basicApplyImprovement(payload);
+};
+
+const handleApplyLocalPatch = async (payload: { operation: PatchOperation }) => {
+    if (!payload.operation) return;
+
+    if (functionMode.value === 'pro') {
+        const workspace = getActiveContextWorkspace();
+        if (!workspace || typeof (workspace as any).applyLocalPatch !== 'function') {
+            toast.error(t('toast.error.optimizeProcessFailed'));
+            return;
+        }
+        (workspace as any).applyLocalPatch(payload.operation);
+        return;
+    }
+
+    // basic 模式：直接覆盖当前 optimizedPrompt（不自动创建新版本）
+    // 用户可通过"保存修改"按钮显式保存为新版本
+    const current = optimizer.optimizedPrompt || '';
+    const result = applyPatchOperationsToText(current, payload.operation);
+    if (!result.ok) {
+        toast.warning(t('toast.warning.patchApplyFailed'));
+        console.warn('[PromptOptimizerApp] Local patch apply failed:', result.report);
+        return;
+    }
+    optimizer.optimizedPrompt = result.text;
+    toast.success(t('evaluation.diagnose.applyFix'));
+};
+
+// 处理重新评估：始终使用当前模式/工作区的最新状态
+const handleReEvaluate = async (): Promise<void> => {
+    if (functionMode.value === 'pro') {
+        const workspace = getActiveContextWorkspace();
+        if (!workspace?.reEvaluateActive) {
+            // 这里按产品约定属于异常：Context 模式必须可以重新评估当前内容
+            console.error('[PromptOptimizerApp] Context re-evaluate handler missing reEvaluateActive');
+            toast.error(t('toast.error.optimizeProcessFailed'));
+            return;
+        }
+        await workspace.reEvaluateActive();
+        return;
+    }
+
+    await handleReEvaluateBasic();
+};
 
 // 处理切换版本
 const handleSwitchVersion = (versionId: any) => {
+    // 版本切换时清除 prompt-only / prompt-iterate 评估结果（内容已变更）
+    evaluation.clearResult('prompt-only');
+    evaluation.clearResult('prompt-iterate');
     optimizer.handleSwitchVersion(versionId);
 };
 
@@ -1392,11 +1561,17 @@ const openTemplateManager = (
 
 // 基础模式子模式变更处理器
 const handleBasicSubModeChange = async (mode: OptimizationMode) => {
+    // 子模式切换时：关闭并清理评估状态，避免残留
+    evaluation.closePanel();
+    evaluation.clearAllResults();
     await setBasicSubMode(mode as import("@prompt-optimizer/core").BasicSubMode);
 };
 
 // 上下文模式子模式变更处理器
 const handleProSubModeChange = async (mode: OptimizationMode) => {
+    // 子模式切换时：关闭并清理评估状态，避免残留
+    evaluation.closePanel();
+    evaluation.clearAllResults();
     await setProSubMode(mode as import("@prompt-optimizer/core").ProSubMode);
 
     if (services.value?.contextMode.value !== mode) {
@@ -1410,6 +1585,9 @@ const handleProSubModeChange = async (mode: OptimizationMode) => {
 const handleImageSubModeChange = async (
     mode: import("@prompt-optimizer/core").ImageSubMode,
 ) => {
+    // 子模式切换时：关闭并清理评估状态，避免残留
+    evaluation.closePanel();
+    evaluation.clearAllResults();
     await setImageSubMode(mode);
 
     if (typeof window !== "undefined") {
@@ -1482,7 +1660,10 @@ const handleModelManagerClosed = async () => {
 
 // 基础模式的测试处理函数
 const handleTestAreaTest = async (testVariables?: Record<string, string>) => {
-    evaluation.clearAllResults();
+    // 只清除测试相关的评估结果，保留左侧提示词评估（prompt-only/prompt-iterate）
+    evaluation.clearResult('original');
+    evaluation.clearResult('optimized');
+    evaluation.clearResult('compare');
 
     await promptTester.executeTest(
         optimizer.prompt,

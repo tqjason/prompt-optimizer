@@ -75,7 +75,10 @@
                     :loading="contextUserOptimization.isOptimizing"
                     :disabled="contextUserOptimization.isOptimizing"
                     :show-preview="true"
+                    :show-analyze-button="true"
+                    :analyze-loading="isAnalyzing"
                     @submit="handleOptimize"
+                    @analyze="handleAnalyze"
                     @configModel="emit('config-model')"
                     @open-preview="emit('open-input-preview')"
                     :enable-variable-extraction="true"
@@ -140,12 +143,12 @@
                 <PromptPanelUI
                     ref="promptPanelRef"
                     :optimized-prompt="contextUserOptimization.optimizedPrompt"
-                    @update:optimizedPrompt="contextUserOptimization.optimizedPrompt = $event"
+                    @update:optimized-prompt="contextUserOptimization.optimizedPrompt = $event"
                     :reasoning="contextUserOptimization.optimizedReasoning"
                     :original-prompt="contextUserOptimization.prompt"
                     :is-optimizing="contextUserOptimization.isOptimizing"
                     :is-iterating="contextUserOptimization.isIterating"
-                    :selectedIterateTemplate="selectedIterateTemplate"
+                    :selected-iterate-template="selectedIterateTemplate"
                     @update:selectedIterateTemplate="
                         emit('update:selectedIterateTemplate', $event)
                     "
@@ -160,6 +163,8 @@
                     @switchToV0="handleSwitchToV0"
                     @save-favorite="emit('save-favorite', $event)"
                     @open-preview="emit('open-prompt-preview')"
+                    @apply-improvement="handleApplyImprovement"
+                    @save-local-edit="handleSaveLocalEdit"
                 />
             </NCard>
         </NFlex>
@@ -243,13 +248,7 @@
             </template>
         </ContextUserTestPanel>
 
-        <!-- 🆕 评估详情面板 -->
-        <EvaluationPanel
-            v-bind="evaluationHandler.panelProps.value"
-            @close="evaluationHandler.evaluation.closePanel"
-            @re-evaluate="evaluationHandler.handleReEvaluate"
-            @apply-improvement="handleApplyImprovement"
-        />
+        <!-- 评估详情面板已移至 App 顶层统一管理，避免双套 evaluation 实例导致行为不一致 -->
     </NFlex>
 </template>
 
@@ -282,7 +281,7 @@
  * />
  * ```
  */
-import { ref, computed, inject, type Ref } from 'vue'
+import { ref, computed, inject, nextTick, type Ref } from 'vue'
 
 import { useI18n } from "vue-i18n";
 import { NCard, NFlex, NText, NIcon, NButton } from "naive-ui";
@@ -290,13 +289,14 @@ import InputPanelUI from "../InputPanel.vue";
 import PromptPanelUI from "../PromptPanel.vue";
 import ContextUserTestPanel from "./ContextUserTestPanel.vue";
 import OutputDisplay from "../OutputDisplay.vue";
-import { EvaluationPanel } from "../evaluation";
 import type { OptimizationMode } from "../../types";
-import type {
-    PromptRecord,
-    PromptRecordChain,
-    Template,
-    ProUserEvaluationContext,
+import {
+    applyPatchOperationsToText,
+    type PatchOperation,
+    type PromptRecord,
+    type PromptRecordChain,
+    type Template,
+    type ProUserEvaluationContext,
 } from "@prompt-optimizer/core";
 import type { TestAreaPanelInstance } from "../types/test-area";
 import type { IteratePayload, SaveFavoritePayload } from "../../types/workspace";
@@ -305,7 +305,7 @@ import type { VariableManagerHooks } from '../../composables/prompt/useVariableM
 import { useTemporaryVariables } from "../../composables/variable/useTemporaryVariables";
 import { useContextUserOptimization } from '../../composables/prompt/useContextUserOptimization';
 import { useContextUserTester } from '../../composables/prompt/useContextUserTester';
-import { useEvaluationHandler } from '../../composables/prompt/useEvaluationHandler';
+import { useEvaluationHandler, provideProContext, useEvaluationContext } from '../../composables/prompt';
 
 // ========================
 // Props 定义
@@ -421,6 +421,12 @@ const variableManager = inject<VariableManagerHooks | null>('variableManager');
 // 输入区折叠状态（初始展开）
 const isInputPanelCollapsed = ref(false);
 
+// ========================
+// 分析状态
+// ========================
+/** 是否正在执行分析 */
+const isAnalyzing = ref(false);
+
 /** 🆕 使用全局临时变量管理器 (从文本提取的变量,仅当前会话有效) */
 const tempVarsManager = useTemporaryVariables();
 const temporaryVariables = tempVarsManager.temporaryVariables;
@@ -522,13 +528,28 @@ const proContext = computed<ProUserEvaluationContext | undefined>(() => {
     };
 });
 
+// 🆕 提供 Pro 模式上下文给子组件（如 PromptPanel），用于评估时传递变量解析上下文
+provideProContext(proContext);
+
+// 🆕 获取全局评估实例（由 App 层 provideEvaluation 注入）
+const globalEvaluation = useEvaluationContext();
+
 // 🆕 测试结果数据
 const testResultsData = computed(() => ({
     originalResult: contextUserTester.testResults.originalResult || undefined,
     optimizedResult: contextUserTester.testResults.optimizedResult || undefined,
 }));
 
-// 🆕 初始化评估处理器
+// 🆕 计算当前迭代需求（用于 prompt-iterate 的 re-evaluate）
+const currentIterateRequirement = computed(() => {
+    const versions = contextUserOptimization.currentVersions;
+    const versionId = contextUserOptimization.currentVersionId;
+    if (!versions || versions.length === 0 || !versionId) return '';
+    const currentVersion = versions.find((v) => v.id === versionId);
+    return currentVersion?.iterationNote || '';
+});
+
+// 🆕 初始化评估处理器（使用全局 evaluation 实例，避免双套状态）
 const evaluationHandler = useEvaluationHandler({
     services: services || ref(null),
     originalPrompt: computed(() => contextUserOptimization.prompt),
@@ -539,6 +560,8 @@ const evaluationHandler = useEvaluationHandler({
     functionMode: computed(() => 'pro'),
     subMode: computed(() => 'user'),
     proContext,
+    currentIterateRequirement,
+    externalEvaluation: globalEvaluation,
 });
 
 // ========================
@@ -675,7 +698,41 @@ const handleClearTemporaryVariables = () => {
  * 🆕 处理优化事件
  */
 const handleOptimize = () => {
+    if (isAnalyzing.value) return;
     contextUserOptimization.optimize();
+};
+
+/**
+ * 处理分析操作
+ * - 清空版本链，创建 V0（与优化同级）
+ * - 不写入历史（分析不产生新提示词）
+ * - 触发 prompt-only 评估
+ */
+const handleAnalyze = async () => {
+    const prompt = contextUserOptimization.prompt;
+    if (!prompt?.trim()) return;
+    if (contextUserOptimization.isOptimizing) return;
+
+    isAnalyzing.value = true;
+
+    // 1. 清空版本链，创建虚拟 V0
+    contextUserOptimization.handleAnalyze();
+
+    // 2. 清理旧的提示词评估结果，避免跨提示词残留
+    evaluationHandler.evaluation.clearResult('prompt-only');
+    evaluationHandler.evaluation.clearResult('prompt-iterate');
+
+    // 3. 收起输入区域
+    isInputPanelCollapsed.value = true;
+
+    await nextTick();
+
+    // 4. 触发 prompt-only 评估
+    try {
+        await evaluationHandler.handleEvaluate('prompt-only');
+    } finally {
+        isAnalyzing.value = false;
+    }
 };
 
 /**
@@ -768,9 +825,36 @@ const handleTestWithVariables = async () => {
 // 🆕 处理应用改进建议事件（使用 evaluationHandler 提供的工厂方法）
 const handleApplyImprovement = evaluationHandler.createApplyImprovementHandler(promptPanelRef);
 
+// 处理保存本地编辑
+const handleSaveLocalEdit = async (payload: { note?: string }) => {
+    await contextUserOptimization.saveLocalEdit({
+        optimizedPrompt: contextUserOptimization.optimizedPrompt || '',
+        note: payload.note,
+        source: 'manual',
+    });
+};
+
 // 暴露 TestAreaPanel 引用给父组件（用于工具调用等高级功能）
 defineExpose({
     testAreaPanelRef,
-    restoreFromHistory
+    restoreFromHistory,
+    openIterateDialog: (initialContent?: string) => {
+        promptPanelRef.value?.openIterateDialog?.(initialContent);
+    },
+    applyLocalPatch: (operation: PatchOperation) => {
+        // 直接覆盖当前 optimizedPrompt（不自动创建新版本）
+        // 用户可通过"保存修改"按钮显式保存为新版本
+        const current = contextUserOptimization.optimizedPrompt || '';
+        const result = applyPatchOperationsToText(current, operation);
+        contextUserOptimization.optimizedPrompt = result.text;
+        if (!result.ok) {
+            window.$message?.warning(t('toast.warning.patchApplyFailed'));
+        } else {
+            window.$message?.success(t('evaluation.diagnose.applyFix'));
+        }
+    },
+    reEvaluateActive: async () => {
+        await evaluationHandler.handleReEvaluate();
+    },
 });
 </script>

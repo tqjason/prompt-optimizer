@@ -35,6 +35,8 @@ export interface UseContextUserOptimization {
   switchVersion: (version: PromptChain['versions'][number]) => Promise<void>
   switchToV0: (version: PromptChain['versions'][number]) => Promise<void>  // 🆕 V0 切换
   loadFromHistory: (payload: { rootPrompt: string, chain: PromptChain, record: PromptRecord }) => void
+  saveLocalEdit: (payload: { optimizedPrompt: string; note?: string; source?: 'patch' | 'manual' }) => Promise<void>
+  handleAnalyze: () => void  // 🆕 分析功能
 }
 
 /**
@@ -182,8 +184,21 @@ export function useContextUserOptimization(
     },
 
     // 迭代优化
-    iterate: async ({ originalPrompt, optimizedPrompt: lastOptimizedPrompt, iterateInput }) => {
-      if (!originalPrompt || !lastOptimizedPrompt || !iterateInput || state.isIterating) return
+    iterate: async (
+      {
+        originalPrompt,
+        optimizedPrompt: lastOptimizedPrompt,
+        iterateInput,
+      }: {
+        originalPrompt: string,
+        optimizedPrompt: string,
+        iterateInput: string,
+      },
+    ) => {
+      // 🔧 修复：迭代模板实际上不需要 originalPrompt，只需要 lastOptimizedPrompt 和 iterateInput
+      // 移除 !originalPrompt 检查，允许用户直接在工作区编辑后迭代
+      if (!lastOptimizedPrompt || state.isIterating) return
+      if (!iterateInput) return
 
       if (!selectedIterateTemplate.value) {
         toast.error(t('toast.error.noIterateTemplate'))
@@ -247,7 +262,7 @@ export function useContextUserOptimization(
               state.isIterating = false
             }
           },
-          selectedIterateTemplate.value.id
+          selectedIterateTemplate.value.id,
         )
       } catch (error: unknown) {
         console.error('[Iterate] 迭代失败:', error)
@@ -322,6 +337,99 @@ export function useContextUserOptimization(
       state.currentChainId = chain.chainId
       state.currentVersions = chain.versions
       state.currentVersionId = record.id
+    },
+
+    /**
+     * 保存本地修改为一个新版本（不触发 LLM）
+     * - 用于"直接修复"与手动编辑后的显式保存
+     */
+    saveLocalEdit: async ({ optimizedPrompt, note, source }: { optimizedPrompt: string; note?: string; source?: 'patch' | 'manual' }) => {
+      try {
+        if (!historyManager.value) throw new Error('History service unavailable')
+        if (!optimizedPrompt) return
+
+        const currentRecord = state.currentVersions.find(v => v.id === state.currentVersionId)
+        const modelKey = currentRecord?.modelKey || selectedOptimizeModel.value || 'local-edit'
+        const templateId =
+          currentRecord?.templateId ||
+          selectedIterateTemplate.value?.id ||
+          selectedTemplate.value?.id ||
+          'local-edit'
+
+        // 若当前没有链（极少数场景），创建新链以便后续版本管理
+        if (!state.currentChainId) {
+          const recordData = {
+            id: uuidv4(),
+            originalPrompt: state.prompt,
+            optimizedPrompt,
+            type: 'contextUserOptimize' as const,
+            modelKey,
+            templateId,
+            timestamp: Date.now(),
+            metadata: {
+              optimizationMode: 'user' as const,
+              functionMode: 'pro' as const,
+              localEdit: true,
+              localEditSource: source || 'manual',
+            }
+          }
+          const newRecord = await historyManager.value.createNewChain(recordData)
+          state.currentChainId = newRecord.chainId
+          state.currentVersions = newRecord.versions
+          state.currentVersionId = newRecord.currentRecord.id
+          return
+        }
+
+        const updatedChain = await historyManager.value.addIteration({
+          chainId: state.currentChainId,
+          originalPrompt: state.prompt,
+          optimizedPrompt,
+          modelKey,
+          templateId,
+          iterationNote: note || (source === 'patch' ? 'Direct fix' : 'Manual edit'),
+          metadata: {
+            optimizationMode: 'user' as const,
+            functionMode: 'pro' as const,
+            localEdit: true,
+            localEditSource: source || 'manual',
+          }
+        })
+
+        state.currentVersions = updatedChain.versions
+        state.currentVersionId = updatedChain.currentRecord.id
+      } catch (error: unknown) {
+        console.error('[useContextUserOptimization] 保存本地修改失败:', error)
+        toast.warning(t('toast.warning.saveHistoryFailed'))
+      }
+    },
+
+    /**
+     * 分析功能：清空版本链，创建 V0（原始版本）
+     * - 不写入历史记录
+     * - 只创建内存中的虚拟 V0 版本
+     */
+    handleAnalyze: () => {
+      if (!state.prompt.trim()) return
+
+      // 生成虚拟的 V0 版本记录（不写入历史）
+      const virtualV0Id = uuidv4()
+      const virtualV0: PromptChain['versions'][number] = {
+        id: virtualV0Id,
+        chainId: '', // 虚拟链，不关联真实历史
+        version: 0,
+        originalPrompt: state.prompt,
+        optimizedPrompt: state.prompt, // V0 的优化内容就是原始内容
+        type: 'userOptimize',
+        timestamp: Date.now(),
+        modelKey: '',
+        templateId: '',
+      }
+
+      // 清空旧链条，设置新的 V0
+      state.currentChainId = ''
+      state.currentVersions = [virtualV0]
+      state.currentVersionId = virtualV0Id
+      state.optimizedPrompt = state.prompt
     }
   })
 

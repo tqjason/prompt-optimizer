@@ -103,7 +103,7 @@
                         :reasoning="optimizedReasoning"
                         :is-optimizing="displayAdapter.displayedIsOptimizing.value"
                         :is-iterating="isIterating"
-                        :selectedIterateTemplate="selectedIterateTemplate"
+                        :selected-iterate-template="selectedIterateTemplate"
                         @update:selectedIterateTemplate="
                             emit('update:selectedIterateTemplate', $event)
                         "
@@ -120,6 +120,8 @@
                         @save-favorite="emit('save-favorite', $event)"
                         @open-preview="emit('open-prompt-preview')"
                         @apply-to-conversation="handleApplyToConversation"
+                        @apply-improvement="handleApplyImprovement"
+                        @save-local-edit="handleSaveLocalEdit"
                     />
                 </template>
                 <template v-else>
@@ -208,13 +210,7 @@
             </template>
         </ConversationTestPanel>
 
-        <!-- 评估详情面板 -->
-        <EvaluationPanel
-            v-bind="evaluationHandler.panelProps.value"
-            @close="evaluationHandler.evaluation.closePanel"
-            @re-evaluate="evaluationHandler.handleReEvaluate"
-            @apply-improvement="handleApplyImprovement"
-        />
+        <!-- 评估详情面板已移至 App 顶层统一管理，避免双套 evaluation 实例导致行为不一致 -->
     </NFlex>
 </template>
 
@@ -227,19 +223,20 @@ import PromptPanelUI from "../PromptPanel.vue";
 import ConversationTestPanel from "./ConversationTestPanel.vue";
 import ConversationManager from "./ConversationManager.vue";
 import OutputDisplay from "../OutputDisplay.vue";
-import { EvaluationPanel } from "../evaluation";
 import { useConversationTester } from '../../composables/prompt/useConversationTester'
 import { useConversationOptimization } from '../../composables/prompt/useConversationOptimization'
 import { usePromptDisplayAdapter } from '../../composables/prompt/usePromptDisplayAdapter'
 import { useTemporaryVariables } from '../../composables/variable/useTemporaryVariables'
-import { useEvaluationHandler } from '../../composables/prompt/useEvaluationHandler'
+import { useEvaluationHandler, provideProContext, useEvaluationContext } from '../../composables/prompt'
 import type { OptimizationMode, ConversationMessage } from "../../types";
-import type {
-    PromptRecord,
-    PromptRecordChain,
-    Template,
-    ToolDefinition,
-    ProSystemEvaluationContext,
+import {
+    applyPatchOperationsToText,
+    type PromptRecord,
+    type PromptRecordChain,
+    type Template,
+    type ToolDefinition,
+    type ProSystemEvaluationContext,
+    type PatchOperation,
 } from "@prompt-optimizer/core";
 import type { TestAreaPanelInstance } from "../types/test-area";
 import type { IteratePayload, SaveFavoritePayload } from "../../types/workspace";
@@ -416,13 +413,28 @@ const proContext = computed<ProSystemEvaluationContext | undefined>(() => {
     }
 })
 
+// 🆕 提供 Pro 模式上下文给子组件（如 PromptPanel），用于评估时传递多消息上下文
+provideProContext(proContext)
+
+// 🆕 获取全局评估实例（由 App 层 provideEvaluation 注入）
+const globalEvaluation = useEvaluationContext()
+
 // 🆕 测试结果数据
 const testResultsData = computed(() => ({
     originalResult: conversationTester.testResults.originalResult || undefined,
     optimizedResult: conversationTester.testResults.optimizedResult || undefined,
 }))
 
-// 🆕 初始化评估处理器
+// 🆕 计算当前迭代需求（用于 prompt-iterate 的 re-evaluate）
+const currentIterateRequirement = computed(() => {
+    const versions = displayAdapter.displayedVersions.value
+    const versionId = displayAdapter.displayedCurrentVersionId.value
+    if (!versions || versions.length === 0 || !versionId) return ''
+    const currentVersion = versions.find((v) => v.id === versionId)
+    return currentVersion?.iterationNote || ''
+})
+
+// 🆕 初始化评估处理器（使用全局 evaluation 实例，避免双套状态）
 const evaluationHandler = useEvaluationHandler({
     services: services || ref(null),
     originalPrompt: computed(() => conversationOptimization.selectedMessage.value?.content || ''),
@@ -433,6 +445,8 @@ const evaluationHandler = useEvaluationHandler({
     functionMode: computed(() => 'pro'),
     subMode: computed(() => 'system'),
     proContext,
+    currentIterateRequirement,
+    externalEvaluation: globalEvaluation,
 })
 
 // 处理迭代优化事件
@@ -573,9 +587,36 @@ const handleTestWithVariables = async () => {
 // 🆕 处理应用改进建议事件（使用 evaluationHandler 提供的工厂方法）
 const handleApplyImprovement = evaluationHandler.createApplyImprovementHandler(promptPanelRef);
 
+// 处理保存本地编辑
+const handleSaveLocalEdit = async (payload: { note?: string }) => {
+    await conversationOptimization.saveLocalEdit({
+        optimizedPrompt: conversationOptimization.optimizedPrompt.value || '',
+        note: payload.note,
+        source: 'manual',
+    });
+};
+
 // 暴露引用
 defineExpose({
     testAreaPanelRef,
-    restoreFromHistory
+    restoreFromHistory,
+    openIterateDialog: (initialContent?: string) => {
+        promptPanelRef.value?.openIterateDialog?.(initialContent);
+    },
+    applyLocalPatch: (operation: PatchOperation) => {
+        // 直接覆盖当前 optimizedPrompt（不自动创建新版本）
+        // 用户可通过"保存修改"按钮显式保存为新版本
+        const current = conversationOptimization.optimizedPrompt.value || '';
+        const result = applyPatchOperationsToText(current, operation);
+        conversationOptimization.optimizedPrompt.value = result.text;
+        if (!result.ok) {
+            window.$message?.warning(t('toast.warning.patchApplyFailed'));
+        } else {
+            window.$message?.success(t('evaluation.diagnose.applyFix'));
+        }
+    },
+    reEvaluateActive: async () => {
+        await evaluationHandler.handleReEvaluate();
+    },
 });
 </script>

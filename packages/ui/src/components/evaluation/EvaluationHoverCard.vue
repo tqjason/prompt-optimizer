@@ -17,14 +17,6 @@
           <NTag :type="getScoreLevelType(result.score.overall)" size="small" round>
             {{ getScoreLevelText(result.score.overall) }}
           </NTag>
-          <!-- 对比评估：显示结论 -->
-          <NText
-            v-if="result.type === 'compare'"
-            :depth="2"
-            style="font-size: 11px;"
-          >
-            {{ result.isOptimizedBetter ? t('evaluation.optimizedBetter') : t('evaluation.originalBetter') }}
-          </NText>
         </div>
       </div>
 
@@ -43,15 +35,23 @@
         </div>
       </div>
 
-      <!-- 问题清单 -->
-      <div v-if="result.issues && result.issues.length > 0" class="section issues-section">
+      <!-- 精准修复（诊断分析） -->
+      <div v-if="result.patchPlan && result.patchPlan.length > 0" class="section patches-section">
         <div class="section-header">
-          <span class="section-icon">⚠️</span>
-          <NText depth="2" style="font-size: 11px; font-weight: 600;">{{ t('evaluation.issues') }}</NText>
+          <span class="section-icon">🛠️</span>
+          <NText depth="2" style="font-size: 11px; font-weight: 600;">{{ t('evaluation.diagnose.title') }}</NText>
         </div>
-        <ul class="section-list">
-          <li v-for="(issue, idx) in result.issues" :key="idx">{{ issue }}</li>
-        </ul>
+        <div class="patch-list">
+          <div v-for="(op, idx) in result.patchPlan" :key="idx" class="patch-item">
+            <div class="patch-instruction">{{ op.instruction }}</div>
+            <div class="patch-diff-inline">
+              <InlineDiff :old-text="op.oldText" :new-text="op.newText" />
+            </div>
+            <NButton text size="tiny" type="primary" class="patch-apply-btn" @click.stop="handleApplyPatch(op)">
+              {{ t('evaluation.diagnose.replaceNow') }}
+            </NButton>
+          </div>
+        </div>
       </div>
 
       <!-- 改进建议 -->
@@ -93,9 +93,9 @@
       <NText depth="3" style="font-size: 12px; margin-bottom: 12px; display: block;">
         {{ t('evaluation.noResult') }}
       </NText>
-      <NButton type="primary" size="small" @click="handleEvaluate">
-        {{ t('evaluation.evaluate') }}
-      </NButton>
+          <NButton type="primary" size="small" @click="handleEvaluate">
+            {{ t('evaluation.evaluate') }}
+          </NButton>
     </div>
   </div>
 </template>
@@ -103,7 +103,8 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { NText, NTag, NProgress, NButton, NSpin, NSpace } from 'naive-ui'
-import type { EvaluationResponse, EvaluationType } from '@prompt-optimizer/core'
+import type { EvaluationResponse, EvaluationType, PatchOperation } from '@prompt-optimizer/core'
+import InlineDiff from './InlineDiff.vue'
 
 const props = defineProps<{
   result: EvaluationResponse | null
@@ -115,6 +116,7 @@ const emit = defineEmits<{
   (e: 'show-detail'): void
   (e: 'evaluate'): void
   (e: 'apply-improvement', payload: { improvement: string; type: EvaluationType }): void
+  (e: 'apply-patch', payload: { operation: PatchOperation }): void
 }>()
 
 const { t } = useI18n()
@@ -166,13 +168,18 @@ const handleEvaluate = () => {
 const handleApplyImprovement = (improvement: string) => {
   emit('apply-improvement', { improvement, type: props.type })
 }
+
+// 处理应用单个补丁
+const handleApplyPatch = (operation: PatchOperation) => {
+  emit('apply-patch', { operation })
+}
 </script>
 
 <style scoped>
 .evaluation-hover-card {
-  width: 280px;
-  padding: 12px;
-  max-height: 400px;
+  width: 360px;
+  padding: 14px;
+  max-height: 480px;
   overflow-y: auto;
 }
 
@@ -254,9 +261,9 @@ const handleApplyImprovement = (improvement: string) => {
 .section-list {
   margin: 0;
   padding-left: 18px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--n-text-color-2);
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 .section-list li {
@@ -275,6 +282,37 @@ const handleApplyImprovement = (improvement: string) => {
 /* 改进建议分区 */
 .improvements-section .section-list {
   color: #2080f0;
+}
+
+/* 精准修复分区 */
+.patch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.patch-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: var(--n-color-embedded);
+  border-radius: 6px;
+}
+
+.patch-instruction {
+  font-size: 12px;
+  font-weight: 500;
+  word-break: break-word;
+  color: var(--n-text-color);
+}
+
+.patch-diff-inline {
+  font-size: 11px;
+}
+
+.patch-apply-btn {
+  align-self: flex-end;
 }
 
 /* 改进建议项 */

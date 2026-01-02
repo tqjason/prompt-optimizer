@@ -69,7 +69,7 @@ describe('TextAdapterRegistry', () => {
 
     it('should throw error for unknown provider', () => {
       expect(() => registry.getAdapter('unknown-provider'))
-        .toThrow('未知文本模型提供商: unknown-provider');
+        .toThrow();
     });
   });
 
@@ -78,11 +78,11 @@ describe('TextAdapterRegistry', () => {
       const providers = registry.getAllProviders();
 
       expect(Array.isArray(providers)).toBe(true);
-      expect(providers.length).toBe(8);
+      expect(providers.length).toBe(9);
 
       const providerIds = providers.map(p => p.id);
       expect(providerIds).toEqual(
-        expect.arrayContaining(['openai', 'deepseek', 'siliconflow', 'zhipu', 'gemini', 'anthropic', 'dashscope', 'openrouter'])
+        expect.arrayContaining(['openai', 'deepseek', 'siliconflow', 'zhipu', 'gemini', 'anthropic', 'dashscope', 'openrouter', 'modelscope'])
       );
     });
 

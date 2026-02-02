@@ -1,4 +1,4 @@
-import { ref, computed, inject, watch } from 'vue'
+import { ref, computed, inject, watch, type Ref } from 'vue'
 
 import { useI18n } from 'vue-i18n'
 import { useToast } from '../ui/useToast'
@@ -9,6 +9,7 @@ import {
   type TextProvider,
   getBuiltinModelIds
 } from '@prompt-optimizer/core'
+import { getI18nErrorMessage } from '../../utils/error'
 import { useModelAdvancedParameters } from './useModelAdvancedParameters'
 import { computeConnectionConfig } from './useConnectionConfig'
 import type { AppServices } from '../../types/services'
@@ -42,14 +43,17 @@ export function useTextModelManager() {
   const { t } = useI18n()
   const toast = useToast()
 
-  const services = inject<AppServices>('services')
-  if (!services) {
+  const services = inject<Ref<AppServices | null>>('services', ref(null))
+  if (!services.value) {
     throw new Error('Services not provided!')
   }
 
   const modelManager = services.value.modelManager
   const llmService = services.value.llmService
   const textAdapterRegistry = services.value.textAdapterRegistry
+  if (!textAdapterRegistry) {
+    throw new Error('textAdapterRegistry not provided!')
+  }
 
   const models = ref<TextModelConfig[]>([])
   const loadingModels = ref(false)
@@ -263,7 +267,7 @@ export function useTextModelManager() {
       console.error('连接测试失败:', error)
       const model = await modelManager.getModel(id)
       const modelName = model?.name || id
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const errorMessage = getI18nErrorMessage(error, 'Unknown error')
       toast.error(t('modelManager.testFailed', {
         provider: modelName,
         error: errorMessage
@@ -280,9 +284,10 @@ export function useTextModelManager() {
       await modelManager.enableModel(id)
       await loadModels()
       toast.success(t('modelManager.enableSuccess'))
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('启用模型失败:', error)
-      toast.error(t('modelManager.enableFailed', { error: error.message }))
+      const message = getI18nErrorMessage(error, 'Unknown error')
+      toast.error(t('modelManager.enableFailed', { error: message }))
     }
   }
 
@@ -293,9 +298,10 @@ export function useTextModelManager() {
       await modelManager.disableModel(id)
       await loadModels()
       toast.success(t('modelManager.disableSuccess'))
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('禁用模型失败:', error)
-      toast.error(t('modelManager.disableFailed', { error: error.message }))
+      const message = getI18nErrorMessage(error, 'Unknown error')
+      toast.error(t('modelManager.disableFailed', { error: message }))
     }
   }
 
@@ -304,9 +310,10 @@ export function useTextModelManager() {
       await modelManager.deleteModel(id)
       await loadModels()
       toast.success(t('modelManager.deleteSuccess'))
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('删除模型失败:', error)
-      toast.error(t('modelManager.deleteFailed', { error: error.message }))
+      const message = getI18nErrorMessage(error, 'Unknown error')
+      toast.error(t('modelManager.deleteFailed', { error: message }))
     }
   }
 
@@ -497,9 +504,10 @@ export function useTextModelManager() {
       if (fetchedModels.length > 0 && !fetchedModels.some((m: { value: string }) => m.value === form.value.modelId)) {
         form.value.modelId = fetchedModels[0].value
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('获取模型列表失败:', error)
-      toast.error(error instanceof Error ? error.message : 'Unknown error' || t('modelManager.loadFailed'))
+      const message = error instanceof Error ? error.message : t('modelManager.loadFailed')
+      toast.error(message)
       modelOptions.value = []
     } finally {
       isLoadingModelOptions.value = false
@@ -567,16 +575,28 @@ export function useTextModelManager() {
   }
 
   const createNewModel = async () => {
-    if (!form.value.id) {
-      toast.error(t('modelManager.modelKeyRequired'))
-      throw new Error('模型标识必填')
+    const modelKey = form.value.id?.trim()
+
+    if (!modelKey) {
+      throw new Error(t('modelManager.modelKeyRequired'))
+    }
+
+    // Prevent conflict with builtin model IDs (e.g. "gemini", "openai").
+    if (isDefaultModel(modelKey)) {
+      throw new Error(t('modelManager.modelKeyReserved', { id: modelKey }))
+    }
+
+    // Prevent duplicate keys (including previously saved custom models).
+    const existingModel = await modelManager.getModel(modelKey)
+    if (existingModel) {
+      throw new Error(t('modelManager.modelKeyAlreadyExists', { id: modelKey }))
     }
 
     const providerMeta = ensureProviderMeta(form.value.providerId)
     const modelMeta = ensureModelMeta(form.value.providerId, form.value.defaultModel || form.value.modelId)
 
     const newConfig = {
-      id: form.value.id,
+      id: modelKey,
       name: form.value.name,
       enabled: true,
       providerMeta,
@@ -585,8 +605,8 @@ export function useTextModelManager() {
       paramOverrides: { ...(form.value.paramOverrides ?? {}) }
     } as TextModelConfig
 
-    await modelManager.addModel(form.value.id, newConfig)
-    return form.value.id
+    await modelManager.addModel(modelKey, newConfig)
+    return modelKey
   }
 
   const saveForm = async () => {

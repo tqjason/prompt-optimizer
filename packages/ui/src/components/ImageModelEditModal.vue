@@ -38,6 +38,28 @@
 
           <!-- 动态连接配置字段 -->
           <NFormItem v-for="field in connectionFields" :key="field.name" :label="t(field.labelKey)">
+            <template v-if="field.name === 'apiKey'" #label>
+              <NSpace align="center" :size="4">
+                <span>{{ t(field.labelKey) }}</span>
+                <NButton
+                  v-if="currentProviderApiKeyUrl"
+                  text
+                  size="tiny"
+                  type="primary"
+                  tag="a"
+                  :href="currentProviderApiKeyUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style="padding: 0 4px;"
+                  :title="t('modelManager.getApiKey')"
+                >
+                  <template #icon>
+                    <ExternalLinkIcon />
+                  </template>
+                </NButton>
+              </NSpace>
+            </template>
+
             <template v-if="field.type === 'string'">
               <NInput
                 v-model:value="configForm.connectionConfig![field.name]"
@@ -210,22 +232,24 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch, nextTick } from 'vue'
+import { computed, watch, nextTick, h } from 'vue'
 
 import { useI18n } from 'vue-i18n'
 import {
   NModal, NSpace, NInput, NInputNumber,
   NCheckbox, NSelect, NButton, NTag, NTooltip, NText,
-  NDivider, NH4, NForm, NFormItem, NImage
+  NDivider, NH4, NForm, NFormItem, NImage, useDialog
 } from 'naive-ui'
 import { useImageModelManager } from '../composables/model/useImageModelManager'
 import { useToast } from '../composables/ui/useToast'
-import type { ImageModelConfig } from '@prompt-optimizer/core'
+import { isRunningInElectron, type ImageModelConfig } from '@prompt-optimizer/core'
 import ModelAdvancedSection from './ModelAdvancedSection.vue'
+import ExternalLinkIcon from './icons/ExternalLinkIcon.vue'
 
 
 const { t } = useI18n()
 const toast = useToast()
+const dialog = useDialog()
 
 // Props
 const props = defineProps<{
@@ -270,7 +294,7 @@ const {
   onProviderChange: handleProviderChange,
   onConnectionConfigChange,
   onModelChange,
-  testConnection: handleTestConnection,
+  testConnection: performTestConnection,
   refreshModels: handleRefreshModels,
   updateParamOverrides,
   saveConfig,
@@ -280,6 +304,32 @@ const {
 
 // 计算属性
 const isEditing = computed(() => !!props.configId)
+
+// 获取当前选择的 Provider 的 API Key URL
+const currentProviderApiKeyUrl = computed(() => {
+  return selectedProvider.value?.apiKeyUrl || null
+})
+
+const handleTestConnection = async () => {
+  const runTest = async () => {
+    await performTestConnection()
+  }
+
+  if (!isRunningInElectron()) {
+    if (selectedProvider.value?.corsRestricted) {
+      const providerName = selectedProvider.value.name || selectedProvider.value.id || 'Unknown'
+      dialog.warning({
+        title: t('modelManager.corsRestrictedTag'),
+        content: () => h('div', { style: 'white-space: pre-line;' }, t('modelManager.corsRestrictedConfirm', { provider: providerName })),
+        positiveText: t('common.confirm'),
+        negativeText: t('common.cancel'),
+        onPositiveClick: runTest
+      })
+      return
+    }
+  }
+  await runTest()
+}
 
 const providerOptions = computed(() =>
   providers.value.map(p => ({
@@ -426,7 +476,7 @@ const save = async () => {
     emit('saved')
     close()
   } catch (_error) {
-    console.error('保存配置失败:', error)
+    console.error('保存配置失败:', _error)
     toast.error(t('image.config.saveFailed'))
   }
 }

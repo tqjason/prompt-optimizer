@@ -10,20 +10,33 @@
     @update:show="(value: boolean) => !value && close()"
   >
     <template #header-extra>
-      <NButton
-        v-if="sortedHistory && sortedHistory.length > 0"
-        @click="handleClear"
-        size="small"
-        quaternary
-      >
-        {{ t('common.clear') }}
-      </NButton>
+      <NSpace align="center" :size="12">
+        <NInput
+          v-model:value="searchQuery"
+          :placeholder="t('history.searchPlaceholder')"
+          size="small"
+          style="width: 200px"
+          clearable
+        >
+          <template #prefix>
+            <span style="font-size: 14px;">🔍</span>
+          </template>
+        </NInput>
+        <NButton
+          v-if="sortedHistory && sortedHistory.length > 0"
+          @click="handleClear"
+          size="small"
+          quaternary
+        >
+          {{ t('common.clear') }}
+        </NButton>
+      </NSpace>
     </template>
 
     <NScrollbar style="max-height: 65vh;">
       <NSpace vertical :size="16" v-if="sortedHistory && sortedHistory.length > 0">
         <NCard
-          v-for="chain in sortedHistory"
+          v-for="chain in filteredHistory"
           :key="chain.chainId"
           hoverable
         >
@@ -57,7 +70,7 @@
                 </NTag>
                 <!-- 上下文模式优化标签 -->
                 <NTag
-                  v-if="chain.rootRecord.type === 'conversationMessageOptimize' || chain.rootRecord.type === 'contextSystemOptimize'"
+                  v-if="isMessageOptimizationType(chain.rootRecord.type)"
                   type="warning"
                   size="small"
                 >
@@ -110,7 +123,7 @@
               v-for="record in chain.versions.slice().reverse()"
               :key="record.id"
               :default-expanded-names="expandedVersions[record.id] ? [record.id] : []"
-              @update:expanded-names="(names) => expandedVersions[record.id] = names.includes(record.id)"
+              @update:expanded-names="(names: Array<string | number> | null) => expandedVersions[record.id] = Array.isArray(names) && names.includes(record.id)"
             >
               <NCollapseItem
                 :name="record.id"
@@ -200,7 +213,7 @@ import { ref, watch, computed, type PropType } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   NModal, NScrollbar, NSpace, NCard, NText, NTag, NButton, 
-  NDivider, NCollapse, NCollapseItem, NEmpty
+  NDivider, NCollapse, NCollapseItem, NEmpty, NInput
 } from 'naive-ui'
 import type { PromptRecord, PromptRecordChain } from '@prompt-optimizer/core'
 import { useToast } from '../composables/ui/useToast'
@@ -230,6 +243,7 @@ const emit = defineEmits<{
 // eslint-disable-next-line @typescript-eslint/no-unused-vars, no-unused-vars
 const _toast = useToast()
 const expandedVersions = ref<Record<string, boolean>>({})
+const searchQuery = ref('')
 
 // --- Close Logic ---
 const close = () => {
@@ -240,6 +254,23 @@ const close = () => {
 // 按照最后修改时间排序，与getAllChains()保持一致
 const sortedHistory = computed(() => {
   return props.history.sort((a, b) => b.currentRecord.timestamp - a.currentRecord.timestamp)
+})
+
+const filteredHistory = computed(() => {
+  if (!searchQuery.value) return sortedHistory.value
+  
+  const query = searchQuery.value.toLowerCase()
+  return sortedHistory.value.filter(chain => {
+    // 匹配原始提示词
+    if (chain.rootRecord.originalPrompt.toLowerCase().includes(query)) return true
+    
+    // 匹配版本中的内容
+    return chain.versions.some(record => {
+      if (record.optimizedPrompt.toLowerCase().includes(query)) return true
+      if (record.iterationNote && record.iterationNote.toLowerCase().includes(query)) return true
+      return false
+    })
+  })
 })
 
 // 切换版本展开/收起状态
@@ -262,8 +293,9 @@ const handleClear = async () => {
 // 监听显示状态变化
 watch(() => props.show, (newShow) => {
   if (!newShow) {
-    // 关闭时重置所有展开状态
+    // 关闭时重置所有展开状态和搜索词
     expandedVersions.value = {}
+    searchQuery.value = ''
   }
 })
 
@@ -285,6 +317,10 @@ const reuse = (record: PromptRecord, chain: PromptRecordChain) => {
 const truncateText = (text: string, maxLength: number) => {
   if (text.length <= maxLength) return text;
   return text.slice(0, maxLength) + '...'
+}
+
+const isMessageOptimizationType = (recordType: string) => {
+  return recordType === 'conversationMessageOptimize' || recordType === 'contextSystemOptimize'
 }
 
 // 获取功能模式标签类型

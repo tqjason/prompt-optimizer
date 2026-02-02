@@ -3,7 +3,7 @@
     :show="show"
     preset="card"
     :style="{ width: '90vw', maxWidth: '1000px' }"
-    :title="modalTitle.value"
+    :title="modalTitle"
     size="large"
     :bordered="false"
     :segmented="true"
@@ -57,9 +57,31 @@
               </NSpace>
             </template>
 
+            <template v-if="field.name === 'apiKey'" #label>
+              <NSpace align="center" :size="4">
+                <span>{{ t('modelManager.apiKey') }}</span>
+                <NButton
+                  v-if="currentProviderApiKeyUrl"
+                  text
+                  size="tiny"
+                  type="primary"
+                  tag="a"
+                  :href="currentProviderApiKeyUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style="padding: 0 4px;"
+                  :title="t('modelManager.getApiKey')"
+                >
+                  <template #icon>
+                    <ExternalLinkIcon />
+                  </template>
+                </NButton>
+              </NSpace>
+            </template>
+
             <template v-if="field.type === 'string'">
               <NInput
-                v-model:value="form.connectionConfig[field.name]"
+                v-model:value="form.connectionConfig[field.name] as string"
                 :type="field.name.toLowerCase().includes('key') ? 'password' : 'text'"
                 :placeholder="field.placeholder"
                 :required="field.required"
@@ -68,13 +90,13 @@
             </template>
             <template v-else-if="field.type === 'number'">
               <NInputNumber
-                v-model:value="form.connectionConfig[field.name]"
+                v-model:value="form.connectionConfig[field.name] as number"
                 :placeholder="field.placeholder"
                 :required="field.required"
               />
             </template>
             <template v-else-if="field.type === 'boolean'">
-              <NCheckbox v-model:checked="form.connectionConfig[field.name]">
+              <NCheckbox v-model:checked="form.connectionConfig[field.name] as boolean">
                 {{ field.name }}
               </NCheckbox>
             </template>
@@ -148,7 +170,7 @@
       <NSpace justify="space-between" align="center" style="width: 100%;">
         <NSpace align="center">
           <NButton
-            @click="testFormConnection"
+            @click="handleTestFormConnection"
             :loading="isTestingFormConnection"
             :disabled="!canTestFormConnection"
             secondary
@@ -180,9 +202,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, nextTick } from 'vue'
+import { computed, inject, nextTick, h } from 'vue'
 
 import { useI18n } from 'vue-i18n'
+import { useToast } from '../composables/ui/useToast'
+import { isRunningInElectron } from '@prompt-optimizer/core'
 import {
   NModal,
   NForm,
@@ -199,9 +223,11 @@ import {
   NText,
   NTag,
   NTooltip,
-  NSpin
+  NSpin,
+  useDialog
 } from 'naive-ui'
 import ModelAdvancedSection from './ModelAdvancedSection.vue'
+import ExternalLinkIcon from './icons/ExternalLinkIcon.vue'
 import type { TextModelManager } from '../composables/model/useTextModelManager'
 
 const { show } = defineProps({
@@ -214,6 +240,8 @@ const { show } = defineProps({
 const emit = defineEmits(['update:show', 'saved'])
 
 const { t } = useI18n()
+const toast = useToast()
+const dialog = useDialog()
 const manager = inject<TextModelManager>('textModelManager')
 if (!manager) {
   throw new Error('Text model manager not provided')
@@ -241,6 +269,33 @@ const isSaving = manager.isSaving
 
 const isEditing = computed(() => !!manager.editingModelId.value)
 
+// 获取当前选择的 Provider 的 API Key URL
+const currentProviderApiKeyUrl = computed(() => {
+  return manager.selectedProvider.value?.apiKeyUrl || null
+})
+
+const handleTestFormConnection = async () => {
+  const runTest = async () => {
+    await testFormConnection()
+  }
+
+  if (!isRunningInElectron()) {
+    const provider = manager.selectedProvider.value
+    if (provider?.corsRestricted) {
+      const providerName = provider.name || provider.id || 'Unknown Provider'
+      dialog.warning({
+        title: t('modelManager.corsRestrictedTag'),
+        content: () => h('div', { style: 'white-space: pre-line;' }, t('modelManager.corsRestrictedConfirm', { provider: providerName })),
+        positiveText: t('common.confirm'),
+        negativeText: t('common.cancel'),
+        onPositiveClick: runTest
+      })
+      return
+    }
+  }
+  await runTest()
+}
+
 const handleUpdateShow = async (value: boolean) => {
   emit('update:show', value)
 
@@ -253,9 +308,38 @@ const handleUpdateShow = async (value: boolean) => {
 }
 
 const handleSubmit = async () => {
-  const id = await manager.saveForm()
-  emit('saved', id || undefined)
-  handleUpdateShow(false)
+  try {
+    const id = await manager.saveForm()
+    emit('saved', id || undefined)
+    handleUpdateShow(false)
+  } catch (error) {
+    console.error('保存模型失败:', error)
+
+    const rawError = error instanceof Error ? error.message : String(error)
+    const fallback = isEditing.value
+      ? t('modelManager.updateFailed', { error: rawError })
+      : t('modelManager.createFailed', { error: rawError })
+
+    const errorCode = (error as { code?: unknown } | null)?.code
+    const errorParams = (error as { params?: unknown } | null)?.params
+
+    if (typeof errorCode === 'string') {
+      try {
+        const translated = t(
+          errorCode,
+          (typeof errorParams === 'object' && errorParams) ? (errorParams as Record<string, unknown>) : {}
+        )
+        if (translated && translated !== errorCode) {
+          toast.error(translated)
+          return
+        }
+      } catch {
+        // fall back
+      }
+    }
+
+    toast.error(rawError || fallback)
+  }
 }
 
 const handleCancel = () => {

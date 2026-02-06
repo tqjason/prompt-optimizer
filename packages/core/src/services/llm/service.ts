@@ -1,10 +1,18 @@
-import { ILLMService, Message, StreamHandlers, LLMResponse, ModelOption, ToolDefinition } from './types';
+import type {
+  ILLMService,
+  Message,
+  StreamHandlers,
+  LLMResponse,
+  ModelOption,
+  ToolDefinition,
+  TextModel,
+  ITextAdapterRegistry
+} from './types';
 import type { TextModelConfig, ModelConfig } from '../model/types';
 import { ModelManager } from '../model/manager';
 import { APIError, RequestConfigError } from './errors';
 import { isRunningInElectron } from '../../utils/environment';
 import { ElectronLLMProxy } from './electron-proxy';
-import type { ITextAdapterRegistry } from './types';
 import { TextAdapterRegistry } from './adapters/registry';
 import { mergeOverrides, splitOverridesBySchema } from '../model/parameter-utils';
 
@@ -47,7 +55,10 @@ export class LLMService implements ILLMService {
   /**
    * 验证模型配置
    */
-  private validateModelConfig(modelConfig: TextModelConfig): void {
+  private validateModelConfig(
+    modelConfig: TextModelConfig,
+    options: { allowDisabled?: boolean } = {}
+  ): void {
     if (!modelConfig) {
       throw new RequestConfigError('Model config cannot be empty');
     }
@@ -57,7 +68,9 @@ export class LLMService implements ILLMService {
     if (!modelConfig.modelMeta || !modelConfig.modelMeta.id) {
       throw new RequestConfigError('Model metadata cannot be empty');
     }
-    if (!modelConfig.enabled) {
+    // Default behavior: disabled models cannot be used for normal requests.
+    // Connection testing is allowed to bypass this check (align with image model test behavior).
+    if (!options.allowDisabled && !modelConfig.enabled) {
       throw new RequestConfigError('Model is not enabled');
     }
   }
@@ -184,6 +197,14 @@ export class LLMService implements ILLMService {
         throw new RequestConfigError('Model provider cannot be empty');
       }
 
+      const modelConfig = await this.modelManager.getModel(provider);
+      if (!modelConfig) {
+        throw new RequestConfigError(`Model ${provider} not found`);
+      }
+
+      // Align with image model connection testing: allow testing even if the model is disabled.
+      this.validateModelConfig(modelConfig, { allowDisabled: true });
+
       // 发送一个简单的测试消息
       const testMessages: Message[] = [
         {
@@ -192,8 +213,12 @@ export class LLMService implements ILLMService {
         }
       ];
 
-      // 使用 sendMessage 进行测试
-      await this.sendMessage(testMessages, provider);
+      this.validateMessages(testMessages);
+
+      // Send directly through the adapter to avoid the normal "enabled" constraint.
+      const adapter = this.registry.getAdapter(modelConfig.providerMeta.id);
+      const runtimeConfig = this.prepareRuntimeConfig(modelConfig);
+      await adapter.sendMessage(testMessages, runtimeConfig);
 
     } catch (error: any) {
       if (error instanceof RequestConfigError || error instanceof APIError) {
@@ -219,7 +244,25 @@ export class LLMService implements ILLMService {
 
       // 使用 Registry 获取模型列表
       const providerId = modelConfig.providerMeta.id;
-      const models = await this.registry.getModels(providerId, modelConfig);
+      let models: TextModel[] = [];
+
+      // NOTE: Registry.getModels() will silently fall back to static models when dynamic fetch fails.
+      // For explicit "fetch model list" actions, we want to surface the failure so UI can avoid
+      // misleading "success" toasts and optionally fall back with a warning.
+      if (this.registry.supportsDynamicModels(providerId)) {
+        const dynamicModels = await this.registry.getDynamicModels(providerId, modelConfig);
+
+        const staticModels = this.registry.getStaticModels(providerId);
+        const dynamicIds = new Set(dynamicModels.map((m) => m.id));
+
+        // Merge static + dynamic for completeness; dynamic wins.
+        models = [
+          ...dynamicModels,
+          ...staticModels.filter((m) => !dynamicIds.has(m.id))
+        ];
+      } else {
+        models = this.registry.getStaticModels(providerId);
+      }
 
       // 转换为选项格式
       return models.map(model => ({

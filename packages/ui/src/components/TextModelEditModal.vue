@@ -11,14 +11,6 @@
   >
     <form v-if="formReady" @submit.prevent="handleSubmit">
         <NForm label-placement="left" label-width="auto" size="small">
-          <NFormItem v-if="!isEditing" :label="t('modelManager.modelKey')">
-            <NInput
-              v-model:value="form.id"
-              :placeholder="t('modelManager.modelKeyPlaceholder')"
-              required
-            />
-          </NFormItem>
-
           <NFormItem :label="t('modelManager.displayName')">
             <NInput
               v-model:value="form.name"
@@ -288,7 +280,10 @@ const handleTestFormConnection = async () => {
         content: () => h('div', { style: 'white-space: pre-line;' }, t('modelManager.corsRestrictedConfirm', { provider: providerName })),
         positiveText: t('common.confirm'),
         negativeText: t('common.cancel'),
-        onPositiveClick: runTest
+        // Don't block dialog close while the async test runs.
+        onPositiveClick: () => {
+          void runTest()
+        }
       })
       return
     }

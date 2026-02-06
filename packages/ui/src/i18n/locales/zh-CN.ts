@@ -792,6 +792,7 @@ export default {
     modelKeyRequired: "模型标识不能为空",
     modelKeyReserved: "模型标识“{id}”与内置配置冲突，请换一个标识，或直接编辑对应的内置模型配置",
     modelKeyAlreadyExists: "模型标识“{id}”已存在，请换一个标识",
+    modelIdGenerateFailed: "生成唯一的模型标识失败，请重试",
 
     // 确认信息
     deleteConfirm: "确定要删除此模型吗？此操作不可恢复。",
@@ -817,6 +818,7 @@ export default {
     loadingModels: "正在加载模型选项...",
     noModelsAvailable: "没有可用模型",
     fetchModelsFailed: "获取模型列表失败：{error}",
+    fetchModelsFallback: "获取模型列表失败：{error}（已回退到默认的 {count} 个模型）",
     needApiKeyAndBaseUrl: "请先填写API地址和密钥",
     needBaseUrl: "请先填写API地址",
     corsRestrictedTag: "CORS受限",

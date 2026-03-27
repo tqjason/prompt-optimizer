@@ -11,6 +11,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { getPiniaServices } from '../../plugins/pinia'
 import { isValidVariableName, sanitizeVariableRecord } from '../../types/variable'
+import { coerceTestPanelVersionValue } from '../../utils/testPanelVersion'
 import {
   isImageRef,
   createImageRef,
@@ -34,9 +35,10 @@ type ImageResultItem = ImageResult['images'][number]
  * image 模式测试面板的版本选择：
  * - 0: v0（原始提示词）
  * - >=1: v1..vn（历史链版本号）
- * - 'latest': 跟随最新 vn
+ * - 'workspace': 下方工作区当前内容（未保存草稿也算）
+ * - 'previous': 动态指向最近保存版本的上一版
  */
-export type TestPanelVersionValue = 0 | number | 'latest'
+export type TestPanelVersionValue = 'workspace' | 'previous' | 0 | number
 
 export type TestVariantId = 'a' | 'b' | 'c' | 'd'
 
@@ -51,7 +53,7 @@ export interface ImageWorkspaceLayoutConfig {
 
 export interface TestVariantConfig {
   id: TestVariantId
-  /** 提示词版本（v0 / vN / latest） */
+  /** 提示词版本（workspace / v0 / vN） */
   version: TestPanelVersionValue
   /** 图像模型配置 key（configId） */
   modelKey: string
@@ -113,9 +115,9 @@ const createDefaultState = (): ImageImage2ImageSessionState => ({
   layout: { mainSplitLeftPct: 50, testColumnCount: 2 },
   testVariants: [
     { id: 'a', version: 0, modelKey: '' },
-    { id: 'b', version: 'latest', modelKey: '' },
-    { id: 'c', version: 'latest', modelKey: '' },
-    { id: 'd', version: 'latest', modelKey: '' },
+    { id: 'b', version: 'workspace', modelKey: '' },
+    { id: 'c', version: 'workspace', modelKey: '' },
+    { id: 'd', version: 'workspace', modelKey: '' },
   ],
   testVariantResults: {
     a: null,
@@ -157,9 +159,9 @@ export const useImageImage2ImageSession = defineStore('imageImage2ImageSession',
   const layout = ref<ImageWorkspaceLayoutConfig>({ mainSplitLeftPct: 50, testColumnCount: 2 })
   const testVariants = ref<TestVariantConfig[]>([
     { id: 'a', version: 0, modelKey: '' },
-    { id: 'b', version: 'latest', modelKey: '' },
-    { id: 'c', version: 'latest', modelKey: '' },
-    { id: 'd', version: 'latest', modelKey: '' },
+    { id: 'b', version: 'workspace', modelKey: '' },
+    { id: 'c', version: 'workspace', modelKey: '' },
+    { id: 'd', version: 'workspace', modelKey: '' },
   ])
   const testVariantResults = ref<TestVariantResults>({
     a: null,
@@ -650,10 +652,7 @@ export const useImageImage2ImageSession = defineStore('imageImage2ImageSession',
           const byId = new Map<TestVariantId, TestVariantConfig>()
 
           const normalizeVersion = (v: unknown): TestPanelVersionValue => {
-            if (v === 0) return 0
-            if (v === 'latest') return 'latest'
-            if (typeof v === 'number' && Number.isFinite(v) && v >= 1) return v
-            return 'latest'
+            return coerceTestPanelVersionValue(v) ?? 'workspace'
           }
 
           for (const item of rawVariants) {

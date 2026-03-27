@@ -8,29 +8,30 @@
  */
 
 import { defineStore } from 'pinia'
-import { ref, type Ref } from 'vue'
+import { ref } from 'vue'
 import { getPiniaServices } from '../../plugins/pinia'
 import { TEMPLATE_SELECTION_KEYS } from '@prompt-optimizer/core'
+import { coerceTestPanelVersionValue } from '../../utils/testPanelVersion'
 import { isValidVariableName, sanitizeVariableRecord } from '../../types/variable'
 import {
+  createDefaultCompareSnapshotRoles,
+  createDefaultCompareSnapshotRoleSignatures,
   createDefaultEvaluationResults,
+  sanitizeCompareSnapshotRoles,
+  sanitizeCompareSnapshotRoleSignatures,
+  type PersistedCompareSnapshotRoles,
+  type PersistedCompareSnapshotRoleSignatures,
   type PersistedEvaluationResults,
 } from '../../types/evaluation'
-
-export interface TestResults {
-  originalResult: string
-  originalReasoning: string
-  optimizedResult: string
-  optimizedReasoning: string
-}
 
 /**
  * pro-variable 测试面板的版本选择：
  * - 0: v0（原始提示词）
  * - >=1: v1..vn（历史链版本号）
- * - 'latest': 跟随最新 vn
+ * - 'workspace': 下方工作区当前内容（未保存草稿也算）
+ * - 'previous': 动态指向最近保存版本的上一版
  */
-export type TestPanelVersionValue = 0 | number | 'latest'
+export type TestPanelVersionValue = 'workspace' | 'previous' | 0 | number
 
 export type TestVariantId = 'a' | 'b' | 'c' | 'd'
 
@@ -75,9 +76,6 @@ export interface ProVariableSessionState {
    */
   temporaryVariables: Record<string, string>
 
-  // legacy: 旧版对比测试结果（仅 A/B）
-  testResults: TestResults | null
-
   // v2: 多列测试（最多 4 列）
   layout: ProVariableLayoutConfig
   testVariants: TestVariantConfig[]
@@ -85,6 +83,8 @@ export interface ProVariableSessionState {
   testVariantLastRunFingerprint: TestVariantLastRunFingerprint
 
   evaluationResults: PersistedEvaluationResults
+  compareSnapshotRoles: PersistedCompareSnapshotRoles<TestVariantId>
+  compareSnapshotRoleSignatures: PersistedCompareSnapshotRoleSignatures<TestVariantId>
   selectedOptimizeModelKey: string
   selectedTestModelKey: string
   selectedTemplateId: string | null
@@ -104,13 +104,12 @@ const createDefaultState = (): ProVariableSessionState => ({
   versionId: '',
   testContent: '',
   temporaryVariables: {},
-  testResults: null,
   layout: { mainSplitLeftPct: 50, testColumnCount: 2 },
   testVariants: [
     { id: 'a', version: 0, modelKey: '' },
-    { id: 'b', version: 'latest', modelKey: '' },
-    { id: 'c', version: 'latest', modelKey: '' },
-    { id: 'd', version: 'latest', modelKey: '' },
+    { id: 'b', version: 'workspace', modelKey: '' },
+    { id: 'c', version: 'workspace', modelKey: '' },
+    { id: 'd', version: 'workspace', modelKey: '' },
   ],
   testVariantResults: {
     a: { result: '', reasoning: '' },
@@ -125,6 +124,8 @@ const createDefaultState = (): ProVariableSessionState => ({
     d: '',
   },
   evaluationResults: createDefaultEvaluationResults(),
+  compareSnapshotRoles: createDefaultCompareSnapshotRoles<TestVariantId>(),
+  compareSnapshotRoleSignatures: createDefaultCompareSnapshotRoleSignatures<TestVariantId>(),
   selectedOptimizeModelKey: '',
   selectedTestModelKey: '',
   selectedTemplateId: null,
@@ -143,13 +144,12 @@ export const useProVariableSession = defineStore('proVariableSession', () => {
   const versionId = ref('')
   const testContent = ref('')
   const temporaryVariables = ref<Record<string, string>>({})
-  const testResults = ref<TestResults | null>(null)
   const layout = ref<ProVariableLayoutConfig>({ mainSplitLeftPct: 50, testColumnCount: 2 })
   const testVariants = ref<TestVariantConfig[]>([
     { id: 'a', version: 0, modelKey: '' },
-    { id: 'b', version: 'latest', modelKey: '' },
-    { id: 'c', version: 'latest', modelKey: '' },
-    { id: 'd', version: 'latest', modelKey: '' },
+    { id: 'b', version: 'workspace', modelKey: '' },
+    { id: 'c', version: 'workspace', modelKey: '' },
+    { id: 'd', version: 'workspace', modelKey: '' },
   ])
   const testVariantResults = ref<TestVariantResults>({
     a: { result: '', reasoning: '' },
@@ -164,6 +164,12 @@ export const useProVariableSession = defineStore('proVariableSession', () => {
     d: '',
   })
   const evaluationResults = ref<PersistedEvaluationResults>(createDefaultEvaluationResults())
+  const compareSnapshotRoles = ref<PersistedCompareSnapshotRoles<TestVariantId>>(
+    createDefaultCompareSnapshotRoles<TestVariantId>()
+  )
+  const compareSnapshotRoleSignatures = ref<PersistedCompareSnapshotRoleSignatures<TestVariantId>>(
+    createDefaultCompareSnapshotRoleSignatures<TestVariantId>()
+  )
   const selectedOptimizeModelKey = ref('')
   const selectedTestModelKey = ref('')
   const selectedTemplateId = ref<string | null>(null)
@@ -200,26 +206,6 @@ export const useProVariableSession = defineStore('proVariableSession', () => {
     reasoning.value = nextReasoning
     chainId.value = nextChainId
     versionId.value = nextVersionId
-    lastActiveAt.value = Date.now()
-  }
-
-  const updateTestResults = (results: TestResults | null) => {
-    const prev = testResults.value
-
-    // 检查是否相同
-    const isSame =
-      prev === results ||
-      (!!prev &&
-        !!results &&
-        prev.originalResult === results.originalResult &&
-        prev.originalReasoning === results.originalReasoning &&
-        prev.optimizedResult === results.optimizedResult &&
-        prev.optimizedReasoning === results.optimizedReasoning)
-
-    if (isSame) return
-
-    // 直接赋值给 ref（现在是响应式的）
-    testResults.value = results
     lastActiveAt.value = Date.now()
   }
 
@@ -292,6 +278,16 @@ export const useProVariableSession = defineStore('proVariableSession', () => {
     lastActiveAt.value = Date.now()
   }
 
+  const updateCompareSnapshotRoles = (
+    roles: PersistedCompareSnapshotRoles<TestVariantId>,
+    signatures: PersistedCompareSnapshotRoleSignatures<TestVariantId>,
+  ) => {
+    compareSnapshotRoles.value = { ...roles }
+    compareSnapshotRoleSignatures.value = { ...signatures }
+    lastActiveAt.value = Date.now()
+    saveSession()
+  }
+
   const setTestColumnCount = (count: TestColumnCount) => {
     if (layout.value.testColumnCount === count) return
     layout.value = { ...layout.value, testColumnCount: count }
@@ -321,6 +317,13 @@ export const useProVariableSession = defineStore('proVariableSession', () => {
     saveSession()
   }
 
+  const resetTestVariantState = () => {
+    const defaultState = createDefaultState()
+    testVariantResults.value = defaultState.testVariantResults
+    testVariantLastRunFingerprint.value = defaultState.testVariantLastRunFingerprint
+    lastActiveAt.value = Date.now()
+  }
+
   const reset = () => {
     const defaultState = createDefaultState()
     prompt.value = defaultState.prompt
@@ -330,12 +333,13 @@ export const useProVariableSession = defineStore('proVariableSession', () => {
     versionId.value = defaultState.versionId
     testContent.value = defaultState.testContent
     temporaryVariables.value = defaultState.temporaryVariables
-    testResults.value = defaultState.testResults
     layout.value = defaultState.layout
     testVariants.value = defaultState.testVariants
     testVariantResults.value = defaultState.testVariantResults
     testVariantLastRunFingerprint.value = defaultState.testVariantLastRunFingerprint
     evaluationResults.value = defaultState.evaluationResults
+    compareSnapshotRoles.value = defaultState.compareSnapshotRoles
+    compareSnapshotRoleSignatures.value = defaultState.compareSnapshotRoleSignatures
     selectedOptimizeModelKey.value = defaultState.selectedOptimizeModelKey
     selectedTestModelKey.value = defaultState.selectedTestModelKey
     selectedTemplateId.value = defaultState.selectedTemplateId
@@ -361,12 +365,13 @@ export const useProVariableSession = defineStore('proVariableSession', () => {
         versionId: versionId.value,
         testContent: testContent.value,
         temporaryVariables: sanitizeVariableRecord(temporaryVariables.value),
-        testResults: testResults.value,
         layout: layout.value,
         testVariants: testVariants.value,
         testVariantResults: testVariantResults.value,
         testVariantLastRunFingerprint: testVariantLastRunFingerprint.value,
         evaluationResults: evaluationResults.value,
+        compareSnapshotRoles: compareSnapshotRoles.value,
+        compareSnapshotRoleSignatures: compareSnapshotRoleSignatures.value,
         selectedOptimizeModelKey: selectedOptimizeModelKey.value,
         selectedTestModelKey: selectedTestModelKey.value,
         selectedTemplateId: selectedTemplateId.value,
@@ -412,20 +417,15 @@ export const useProVariableSession = defineStore('proVariableSession', () => {
         temporaryVariables.value = sanitizeVariableRecord(
           (parsed as Partial<ProVariableSessionState>).temporaryVariables,
         )
-        testResults.value = (parsed.testResults && typeof parsed.testResults === 'object')
-          ? (parsed.testResults as TestResults)
-          : null
 
         const defaultState = createDefaultState()
         const coerceVersionValue = (value: unknown): TestPanelVersionValue | null => {
-          if (value === 'latest') return 'latest'
-          if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return Math.floor(value)
-          return null
+          const normalizedValue = coerceTestPanelVersionValue(value)
+          return normalizedValue == null ? null : normalizedValue
         }
 
         const legacyModelKey = typeof parsed.selectedTestModelKey === 'string' ? parsed.selectedTestModelKey : ''
 
-        // v2: variant results (prefer saved; else migrate legacy testResults into a/b)
         const savedVariantResults = (parsed as Partial<ProVariableSessionState>).testVariantResults
         const savedFingerprint = (parsed as Partial<ProVariableSessionState>).testVariantLastRunFingerprint
 
@@ -447,11 +447,6 @@ export const useProVariableSession = defineStore('proVariableSession', () => {
             const vr = coerceVariantResult(obj[id])
             if (vr) nextVariantResults[id] = vr
           }
-        } else if (parsed.testResults) {
-          if (typeof parsed.testResults.originalResult === 'string') nextVariantResults.a.result = parsed.testResults.originalResult
-          if (typeof parsed.testResults.originalReasoning === 'string') nextVariantResults.a.reasoning = parsed.testResults.originalReasoning
-          if (typeof parsed.testResults.optimizedResult === 'string') nextVariantResults.b.result = parsed.testResults.optimizedResult
-          if (typeof parsed.testResults.optimizedReasoning === 'string') nextVariantResults.b.reasoning = parsed.testResults.optimizedReasoning
         }
 
         if (savedFingerprint && typeof savedFingerprint === 'object') {
@@ -501,6 +496,14 @@ export const useProVariableSession = defineStore('proVariableSession', () => {
             ? (parsed.evaluationResults as PersistedEvaluationResults)
             : {}),
         }
+        compareSnapshotRoles.value = sanitizeCompareSnapshotRoles(
+          (parsed as Partial<ProVariableSessionState>).compareSnapshotRoles,
+          ids
+        )
+        compareSnapshotRoleSignatures.value = sanitizeCompareSnapshotRoleSignatures(
+          (parsed as Partial<ProVariableSessionState>).compareSnapshotRoleSignatures,
+          ids
+        )
         selectedOptimizeModelKey.value = typeof parsed.selectedOptimizeModelKey === 'string' ? parsed.selectedOptimizeModelKey : ''
         selectedTestModelKey.value = typeof parsed.selectedTestModelKey === 'string' ? parsed.selectedTestModelKey : ''
         selectedTemplateId.value = typeof parsed.selectedTemplateId === 'string' ? parsed.selectedTemplateId : null
@@ -544,12 +547,13 @@ export const useProVariableSession = defineStore('proVariableSession', () => {
     versionId,
     testContent,
     temporaryVariables,
-    testResults,
     layout,
     testVariants,
     testVariantResults,
     testVariantLastRunFingerprint,
     evaluationResults,
+    compareSnapshotRoles,
+    compareSnapshotRoleSignatures,
     selectedOptimizeModelKey,
     selectedTestModelKey,
     selectedTemplateId,
@@ -561,7 +565,6 @@ export const useProVariableSession = defineStore('proVariableSession', () => {
     updatePrompt,
     updateOptimizedResult,
     updateTestContent,
-    updateTestResults,
 
     setTemporaryVariable,
     getTemporaryVariable,
@@ -572,8 +575,10 @@ export const useProVariableSession = defineStore('proVariableSession', () => {
     updateTemplate,
     updateIterateTemplate,
     toggleCompareMode,
+    updateCompareSnapshotRoles,
     setTestColumnCount,
     setMainSplitLeftPct,
+    resetTestVariantState,
     updateTestVariant,
     reset,
 

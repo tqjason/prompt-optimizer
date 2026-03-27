@@ -1,6 +1,6 @@
 {
   "name": "prompt-optimizer",
-  "version": "2.6.1",
+  "version": "2.7.0",
   "private": true,
   "packageManager": "pnpm@10.6.1",
   "engines": {
@@ -16,7 +16,9 @@
     "build:web": "pnpm -F @prompt-optimizer/web build",
     "build:ext": "pnpm -F @prompt-optimizer/extension build",
     "build:desktop-only": "pnpm -F @prompt-optimizer/desktop build",
+    "build:desktop-only:ci": "pnpm -F @prompt-optimizer/desktop build:ci",
     "build:desktop": "npm-run-all build:core build:ui build:web build:desktop-only",
+    "build:desktop:ci": "npm-run-all build:core build:ui build:web build:desktop-only:ci",
     "dev": "npm-run-all clean:dist build:core build:ui dev:parallel",
     "dev:fresh": "npm-run-all kill:dev clean pnpm-install dev",
     "dev:parallel": "concurrently -k -p \"[{name}]\" -n \"UI,WEB\" \"pnpm -F @prompt-optimizer/ui build --watch\" \"pnpm -F @prompt-optimizer/web dev\"",
@@ -30,6 +32,7 @@
     "test:e2e:smart": "node scripts/smart-e2e.js",
     "test:e2e:record": "cross-env E2E_VCR_MODE=record playwright test",
     "test:e2e:replay": "cross-env E2E_VCR_MODE=replay playwright test",
+    "compare:calibrate": "pnpm -F @prompt-optimizer/core build && node scripts/run-structured-compare-calibration.mjs",
     "test:gate:core": "pnpm -F @prompt-optimizer/core test:gate",
     "test:gate:ui": "pnpm -F @prompt-optimizer/core build && pnpm -F @prompt-optimizer/ui test",
     "test:gate:e2e": "playwright test tests/e2e/regression.spec.ts tests/e2e/workflows/p0-route-smoke.spec.ts",

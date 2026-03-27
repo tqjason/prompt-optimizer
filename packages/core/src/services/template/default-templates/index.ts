@@ -63,31 +63,23 @@ import { template as image_iterate_general } from './image-optimize/iterate/imag
 import { template as image_iterate_general_en } from './image-optimize/iterate/image-iterate-general_en';
 
 // 评估模板 - 基础模式/系统提示词
-import { template as evaluation_basic_system_original } from './evaluation/basic/system/evaluation-original';
-import { template as evaluation_basic_system_original_en } from './evaluation/basic/system/evaluation-original_en';
-import { template as evaluation_basic_system_optimized } from './evaluation/basic/system/evaluation-optimized';
-import { template as evaluation_basic_system_optimized_en } from './evaluation/basic/system/evaluation-optimized_en';
+import { template as evaluation_basic_system_result } from './evaluation/basic/system/evaluation-result';
+import { template as evaluation_basic_system_result_en } from './evaluation/basic/system/evaluation-result_en';
 import { template as evaluation_basic_system_compare } from './evaluation/basic/system/evaluation-compare';
 import { template as evaluation_basic_system_compare_en } from './evaluation/basic/system/evaluation-compare_en';
 // 评估模板 - 基础模式/用户提示词
-import { template as evaluation_basic_user_original } from './evaluation/basic/user/evaluation-original';
-import { template as evaluation_basic_user_original_en } from './evaluation/basic/user/evaluation-original_en';
-import { template as evaluation_basic_user_optimized } from './evaluation/basic/user/evaluation-optimized';
-import { template as evaluation_basic_user_optimized_en } from './evaluation/basic/user/evaluation-optimized_en';
+import { template as evaluation_basic_user_result } from './evaluation/basic/user/evaluation-result';
+import { template as evaluation_basic_user_result_en } from './evaluation/basic/user/evaluation-result_en';
 import { template as evaluation_basic_user_compare } from './evaluation/basic/user/evaluation-compare';
 import { template as evaluation_basic_user_compare_en } from './evaluation/basic/user/evaluation-compare_en';
 // 评估模板 - 高级模式/系统提示词（多消息模式）
-import { template as evaluation_pro_system_original } from './evaluation/pro/system/evaluation-original';
-import { template as evaluation_pro_system_original_en } from './evaluation/pro/system/evaluation-original_en';
-import { template as evaluation_pro_system_optimized } from './evaluation/pro/system/evaluation-optimized';
-import { template as evaluation_pro_system_optimized_en } from './evaluation/pro/system/evaluation-optimized_en';
+import { template as evaluation_pro_system_result } from './evaluation/pro/system/evaluation-result';
+import { template as evaluation_pro_system_result_en } from './evaluation/pro/system/evaluation-result_en';
 import { template as evaluation_pro_system_compare } from './evaluation/pro/system/evaluation-compare';
 import { template as evaluation_pro_system_compare_en } from './evaluation/pro/system/evaluation-compare_en';
 // 评估模板 - 高级模式/用户提示词（变量模式）
-import { template as evaluation_pro_user_original } from './evaluation/pro/user/evaluation-original';
-import { template as evaluation_pro_user_original_en } from './evaluation/pro/user/evaluation-original_en';
-import { template as evaluation_pro_user_optimized } from './evaluation/pro/user/evaluation-optimized';
-import { template as evaluation_pro_user_optimized_en } from './evaluation/pro/user/evaluation-optimized_en';
+import { template as evaluation_pro_user_result } from './evaluation/pro/user/evaluation-result';
+import { template as evaluation_pro_user_result_en } from './evaluation/pro/user/evaluation-result_en';
 import { template as evaluation_pro_user_compare } from './evaluation/pro/user/evaluation-compare';
 import { template as evaluation_pro_user_compare_en } from './evaluation/pro/user/evaluation-compare_en';
 // 评估模板 - 仅提示词评估（无需测试结果）
@@ -121,6 +113,25 @@ import { variableExtractionTemplateEn } from './variable-extraction';
 // 变量值生成模板
 import { variableValueGenerationTemplate } from './variable-value-generation';
 import { variableValueGenerationTemplateEn } from './variable-value-generation';
+// 基于评估结果的智能改写模板
+import { template as evaluation_rewrite_basic_system } from './evaluation-rewrite/basic-system';
+import { template as evaluation_rewrite_basic_system_en } from './evaluation-rewrite/basic-system_en';
+import { template as evaluation_rewrite_basic_user } from './evaluation-rewrite/basic-user';
+import { template as evaluation_rewrite_basic_user_en } from './evaluation-rewrite/basic-user_en';
+import { template as evaluation_rewrite_pro_multi } from './evaluation-rewrite/pro-multi';
+import { template as evaluation_rewrite_pro_multi_en } from './evaluation-rewrite/pro-multi_en';
+import { template as evaluation_rewrite_pro_variable } from './evaluation-rewrite/pro-variable';
+import { template as evaluation_rewrite_pro_variable_en } from './evaluation-rewrite/pro-variable_en';
+import { template as evaluation_rewrite_generic } from './evaluation-rewrite/generic';
+import { template as evaluation_rewrite_generic_en } from './evaluation-rewrite/generic_en';
+import { template as evaluation_structured_compare_pair_judge } from './evaluation-structured-compare/pair-judge';
+import { template as evaluation_structured_compare_pair_judge_en } from './evaluation-structured-compare/pair-judge_en';
+import { template as evaluation_structured_compare_synthesis } from './evaluation-structured-compare/synthesis';
+import { template as evaluation_structured_compare_synthesis_en } from './evaluation-structured-compare/synthesis_en';
+
+// 图片 JSON 提取模板
+import { imagePromptExtractionTemplate } from './image-prompt-extraction';
+import { imagePromptExtractionTemplateEn } from './image-prompt-extraction';
 
 // 简单的模板集合 - 模板自身已包含完整信息（id、name、language、type等）
 export const ALL_TEMPLATES = {
@@ -174,31 +185,23 @@ export const ALL_TEMPLATES = {
   image_iterate_general,
   image_iterate_general_en,
   // 评估模板 - 基础模式/系统提示词
-  evaluation_basic_system_original,
-  evaluation_basic_system_original_en,
-  evaluation_basic_system_optimized,
-  evaluation_basic_system_optimized_en,
+  evaluation_basic_system_result,
+  evaluation_basic_system_result_en,
   evaluation_basic_system_compare,
   evaluation_basic_system_compare_en,
   // 评估模板 - 基础模式/用户提示词
-  evaluation_basic_user_original,
-  evaluation_basic_user_original_en,
-  evaluation_basic_user_optimized,
-  evaluation_basic_user_optimized_en,
+  evaluation_basic_user_result,
+  evaluation_basic_user_result_en,
   evaluation_basic_user_compare,
   evaluation_basic_user_compare_en,
   // 评估模板 - 高级模式/系统提示词（多消息模式）
-  evaluation_pro_system_original,
-  evaluation_pro_system_original_en,
-  evaluation_pro_system_optimized,
-  evaluation_pro_system_optimized_en,
+  evaluation_pro_system_result,
+  evaluation_pro_system_result_en,
   evaluation_pro_system_compare,
   evaluation_pro_system_compare_en,
   // 评估模板 - 高级模式/用户提示词（变量模式）
-  evaluation_pro_user_original,
-  evaluation_pro_user_original_en,
-  evaluation_pro_user_optimized,
-  evaluation_pro_user_optimized_en,
+  evaluation_pro_user_result,
+  evaluation_pro_user_result_en,
   evaluation_pro_user_compare,
   evaluation_pro_user_compare_en,
   // 评估模板 - 仅提示词评估（无需测试结果）
@@ -230,4 +233,22 @@ export const ALL_TEMPLATES = {
   // 变量值生成模板
   variableValueGenerationTemplate,
   variableValueGenerationTemplateEn,
+  // 基于评估结果的智能改写模板
+  evaluation_rewrite_basic_system,
+  evaluation_rewrite_basic_system_en,
+  evaluation_rewrite_basic_user,
+  evaluation_rewrite_basic_user_en,
+  evaluation_rewrite_pro_multi,
+  evaluation_rewrite_pro_multi_en,
+  evaluation_rewrite_pro_variable,
+  evaluation_rewrite_pro_variable_en,
+  evaluation_rewrite_generic,
+  evaluation_rewrite_generic_en,
+  evaluation_structured_compare_pair_judge,
+  evaluation_structured_compare_pair_judge_en,
+  evaluation_structured_compare_synthesis,
+  evaluation_structured_compare_synthesis_en,
+  // 图片 JSON 提取模板
+  imagePromptExtractionTemplate,
+  imagePromptExtractionTemplateEn,
 };
